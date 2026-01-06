@@ -1,6 +1,8 @@
+// backend/src/controllers/learner/submission.controller.js
 import Content from '../../models/Content.model.js';    
 import mongoose from 'mongoose';
 import Submission from '../../models/submission.model.js';
+import { runJavaScriptJudge } from '../../services/compiler/judgeRunner.js';
 export const createSubmission = async (req, res) => {
   try {
     const { contentId, language, sourceCode } = req.body;
@@ -46,8 +48,10 @@ export const createSubmission = async (req, res) => {
       status: 'pending'
     });
 
-    // ⚠️ Judge will be triggered HERE later
-    // judgeSubmission(submission._id);
+   // 5. Trigger Judge Asynchronously (Do not await)
+    runJavaScriptJudge(submission._id).catch(err => {
+        console.error(`Judge Trigger Error for Submission ${submission._id}:`, err);
+    });
 
     res.status(201).json({
       success: true,

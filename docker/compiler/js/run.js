@@ -1,40 +1,32 @@
+// docker/compiler/js/run.js
 const fs = require("fs");
 const { exec } = require("child_process");
 
-const CODE_FILE = "solution.js";
-const INPUT_FILE = "input.txt";
+const CODE_FILE = "/workspace/code.js";
+const INPUT_FILE = "/workspace/input.txt";
 
-// Read injected data
-const sourceCode = fs.readFileSync("/app/code.js", "utf8");
-const input = fs.readFileSync("/app/input.txt", "utf8");
+let input = "";
+try {
+  input = fs.readFileSync(INPUT_FILE, "utf8");
+} catch {
+  // input may be empty
+}
 
-// Write user code
-fs.writeFileSync(CODE_FILE, sourceCode);
-
-// Execute with timeout
 const start = Date.now();
 
 exec(
   `node ${CODE_FILE} < ${INPUT_FILE}`,
   { timeout: 2000, maxBuffer: 1024 * 1024 },
   (error, stdout, stderr) => {
-    const end = Date.now();
+    const time = Date.now() - start;
 
     if (error) {
       if (error.killed) {
-        return console.log(
-          JSON.stringify({
-            status: "TLE",
-            time: end - start
-          })
-        );
+        return console.log(JSON.stringify({ status: "TLE", time }));
       }
 
       return console.log(
-        JSON.stringify({
-          status: "RUNTIME_ERROR",
-          error: stderr.toString()
-        })
+        JSON.stringify({ status: "RUNTIME_ERROR", error: stderr })
       );
     }
 
@@ -42,7 +34,7 @@ exec(
       JSON.stringify({
         status: "OK",
         output: stdout.trim(),
-        time: end - start
+        time
       })
     );
   }

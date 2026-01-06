@@ -38,15 +38,22 @@ const submissionSchema = new mongoose.Schema({
     default: 'pending'
   },
 
-  testResults: [{
+  // Inside your Submission Schema
+ testResults: [{
     testCase: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'TestCase'
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'TestCase'
     },
-    passed: Boolean,
+    status: {
+        type: String,
+        enum: ['ACCEPTED', 'WRONG_ANSWER', 'TLE', 'RUNTIME_ERROR']
+    },
+    passed: Boolean,             // Keep for easy filtering
+    output: String,              // <--- ADD THIS (Actual user output)
+    expectedOutput: String,      // <--- ADD THIS (What we wanted)
     executionTime: Number,
     errorMessage: String
-  }],
+}],
 
   executionStats: {
     time: Number,

@@ -1,14 +1,16 @@
+
 FROM node:18-alpine
 
-# Create non-root user for security
+# Security: non-root user
 RUN addgroup -S judge && adduser -S judge -G judge
 
-WORKDIR /app
-
-# Copy runner
+# Executor location (DO NOT MOUNT HERE)
+WORKDIR /judge
 COPY run.js .
+
+# Workspace for user code (THIS is mounted)
+WORKDIR /workspace
 
 USER judge
 
-# Default command
-ENTRYPOINT ["node", "run.js"]
+ENTRYPOINT ["node", "/judge/run.js"]
