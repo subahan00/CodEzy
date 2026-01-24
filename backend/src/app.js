@@ -5,6 +5,8 @@ import LoginRoutes from "./routes/LoginRoutes.js"
 import aiRoutes from "./routes/aiRoutes.js";
 import problemROUTES from "./routes/problem.routes.js";
 import submissionRoutes from "./routes/submission.routes.js";
+import userRoutes from "./routes/UserRoutes.js";
+import leaderboardRoutes from "./routes/leaderboardRoutes.js";  
 dotenv.config();
 
 const app = express();
@@ -17,5 +19,6 @@ app.get("/", (req, res) => {
 });
 app.use("/api/problems", problemROUTES);
 app.use("/api/submissions", submissionRoutes);
-
+app.use("/api/users", userRoutes);  
+app.use("/api/leaderboard", leaderboardRoutes); 
 export default app;

@@ -4,5 +4,5 @@ import authMiddleware from "../middleware/auth.middleware.js";
 const router =express.Router()
 router.post('/login',LoginController.loginUser)
 router.post('/register',LoginController.registerUser)
-router.get('/profile',authMiddleware,LoginController.getName)
+router.get('/profile',authMiddleware,LoginController.getUserData)
 export default router;

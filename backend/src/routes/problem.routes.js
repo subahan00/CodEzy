@@ -10,6 +10,9 @@ import {
   getAllProblems,
   getProblemBySlug
 } from '../controllers/learner/problem.controller.js';
+import {
+  deleteProblem,
+  updateProblem} from '../controllers/admin/problem.controller.js';
 
 const router = express.Router();
 
@@ -18,11 +21,16 @@ const router = express.Router();
 // =====================
 router.post(
   '/',
-  authMiddleware,
-  isAdmin,
+   authMiddleware,
+  // isAdmin,
   createProblem
 );
-
+router.put(
+  '/publish/:id',
+  authMiddleware,
+  isAdmin,
+  publishProblem
+);
 router.post(
   '/:id/testcases',
   authMiddleware,
@@ -43,15 +51,28 @@ router.patch(
 router.get(
   '/',
   authMiddleware,
-  isLearner,
+  // isLearner,
   getAllProblems
 );
 
 router.get(
   '/:slug',
   authMiddleware,
-  isLearner,
+  // isLearner,
   getProblemBySlug
 );
 
+
+router.delete(
+  '/:id',
+  authMiddleware,
+  isAdmin,
+  deleteProblem
+);
+router.put(
+  '/:id',
+  authMiddleware,
+  isAdmin,
+  updateProblem
+);
 export default router;

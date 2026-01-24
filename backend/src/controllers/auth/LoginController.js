@@ -71,6 +71,9 @@ const loginUser = async (req, res) => {
         id: user_exist._id,
         username: user_exist.username,
         email: user_exist.email,
+        role: user_exist.role,
+        skillLevel: user_exist.skillLevel,
+        
       },
       token,
       message: "Login successful",
@@ -98,9 +101,26 @@ const getName = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+const getUserData = async (req , res) => {
+  const userId = req.user.userId;
+
+  try {
+    const user = await User.findById(userId).select("username email skillLevel");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json(user);
+
+  } catch (err) {
+    console.error("GetName error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
 
 export default {
   registerUser,
   loginUser,
   getName,
+  getUserData,  
 };

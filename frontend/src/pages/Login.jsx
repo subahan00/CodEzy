@@ -181,6 +181,7 @@ const AuthPage = () => {
         const response = await LoginService.Test_login(creds.email, creds.password);
         const token = response.data.token;
         localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(response.data.user));
         Navigate("/profile");
       }
     } catch (err) {

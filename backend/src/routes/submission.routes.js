@@ -3,7 +3,8 @@ import authMiddleware from '../middleware/auth.middleware.js';
 import {isAdmin,isLearner} from '../middleware/role.middleware.js';
 import {
   createSubmission,
-  getMySubmissions
+  getMySubmissions,
+  getSubmissionById
 } from '../controllers/learner/submission.controller.js';
 
 const router = express.Router();
@@ -21,6 +22,12 @@ router.get(
   authMiddleware,
   isLearner,
   getMySubmissions
+);
+router.get(
+  '/:id',
+  authMiddleware,
+  isLearner,
+  getSubmissionById
 );
 
 export default router;

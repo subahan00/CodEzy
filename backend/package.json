@@ -18,10 +18,12 @@
     "@google/genai": "^1.32.0",
     "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.66.4",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "groq-sdk": "^0.37.0",
+    "ioredis": "^5.9.0",
     "mongoose": "^9.0.0",
     "openai": "^6.10.0"
   },
