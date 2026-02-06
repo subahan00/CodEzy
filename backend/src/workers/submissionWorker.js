@@ -10,19 +10,27 @@ const connection = new IORedis({
 
 // 1. Define the Worker
 const worker = new Worker('submission-queue', async (job) => {
-  console.log(`Job ${job.id}: Processing Submission ${job.data.submissionId}...`);
   
-  // Call your existing judge logic
-  await runJavaScriptJudge(job.data.submissionId);
+  // Logic to print nice logs for both Modes
+  const label = job.data.isDryRun ? 'Dry Run' : `Submission ${job.data.submissionId}`;
+  console.log(`Job ${job.id}: Processing ${label}...`);
+  
+  // ✅ FIX 1: Pass the WHOLE job.data object
+  // (This contains code, language, isDryRun, AND submissionId)
+  const result = await runJavaScriptJudge(job.data);
+
+  // ✅ FIX 2: Return the result!
+  // This is required for the controller to get the data back via job.waitUntilFinished()
+  return result;
 
 }, {
   connection,
   concurrency: 1 // 🔥 CRITICAL: Only run 1 docker container at a time
 });
 
-// 2. Event Listeners (Optional, for logs)
-worker.on('completed', (job) => {
-  console.log(`Job ${job.id}: Completed!`);
+// 2. Event Listeners
+worker.on('completed', (job, returnvalue) => {
+  console.log(`Job ${job.id}: Completed! Result:`, returnvalue?.status || "Unknown");
 });
 
 worker.on('failed', (job, err) => {

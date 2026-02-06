@@ -4,6 +4,8 @@ import { FiCheckCircle, FiClock, FiXCircle } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 import profileService from '../services/userService/profileService';
 import LeaderboardTable from '../component/Leaderboard/Leaderboard';
+import SubmissionModal from '../component/Profile/SubmissionModal';
+import submissionService from '../services/submissionService/submissionService';
 const ProfilePage = () => {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,18 +15,19 @@ const ProfilePage = () => {
     medium: 0,
     hard: 0
   });
-    useEffect(() => { 
+  useEffect(() => {
     fetchHistory();
   }, []);
-   const user=JSON.parse(localStorage.getItem("user"));
-        console.log('user-',user);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const user = JSON.parse(localStorage.getItem("user"));
+  console.log('user-', user);
 
   const fetchHistory = async () => {
     try {
       // We need to attach the token!
       const res = await profileService.fetchHistory();
-      console.log('res-',res)
-       
+      console.log('res-', res)
+
 
       const subs = res;
       setSubmissions(subs);
@@ -39,7 +42,7 @@ const ProfilePage = () => {
   const calculateStats = (subs) => {
     // 1. Filter only ACCEPTED submissions
     const accepted = subs.filter(s => s.status === 'accepted');
-    
+
     // 2. Get Unique Problems Solved (using a Set of Content IDs)
     const uniqueSolved = new Set();
     let easy = 0, medium = 0, hard = 0;
@@ -61,16 +64,24 @@ const ProfilePage = () => {
       hard
     });
   };
-
+  const handleViewSubmission = async (id) => {
+    try {
+      const res = await submissionService.getSubmissionById(id);
+      console.log('resssssssss-', res)  
+      setSelectedSubmission(res.data.data);
+    } catch (error) {
+      console.error("Could not fetch submission details");
+    }
+  };
   if (loading) return <div className="text-white p-10">Loading Profile...</div>;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-10">
       <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-        
+
         {/* LEFT COLUMN: User Info & Stats */}
         <div className="md:col-span-1 space-y-6">
-          
+
           {/* User Card */}
           <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg text-center">
             <div className="w-24 h-24 bg-gradient-to-tr from-green-400 to-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl font-bold">
@@ -86,7 +97,7 @@ const ProfilePage = () => {
           {/* Stats Card */}
           <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg">
             <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Problems Solved</h3>
-            
+
             <div className="text-4xl font-bold text-center mb-6 text-white">
               {stats.totalSolved}
             </div>
@@ -152,20 +163,28 @@ const ProfilePage = () => {
                         </span>
                       </td>
                       <td className="p-4 text-gray-400 font-mono">
-                         {/* Assuming stats has passed count, or calculate runtime if available */}
-                         {sub.executionStats?.passed || 0} passed
+                        {/* Assuming stats has passed count, or calculate runtime if available */}
+                        {sub.executionStats?.passed || 0} passed
                       </td>
                       <td className="p-4 text-gray-500">
                         <div className="flex items-center gap-1">
-                          <FiClock size={14}/>
+                          <FiClock size={14} />
                           {new Date(sub.createdAt).toLocaleDateString()}
                         </div>
+                      </td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => handleViewSubmission(sub._id)}
+                          className="text-sm text-blue-400 hover:text-blue-300 underline"
+                        >
+                          View Code
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              
+
               {submissions.length === 0 && (
                 <div className="p-8 text-center text-gray-500">
                   No submissions yet. Go solve some problems!
@@ -176,6 +195,10 @@ const ProfilePage = () => {
         </div>
 
       </div>
+      <SubmissionModal 
+   submission={selectedSubmission} 
+   onClose={() => setSelectedSubmission(null)} 
+/>
     </div>
   );
 };

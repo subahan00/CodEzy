@@ -1,155 +1,181 @@
-import { exec } from 'child_process';
+import { exec } from 'child_process'; 
 import fs from "fs";
 import path from "path";
 import Submission from "../../models/submission.model.js";
 import TestCase from "../../models/testCase.model.js";
 
-// Configuration for supported languages
 const LANGUAGE_CONFIG = {
-  javascript: {
-    image: "codezy-js-judge",
-    fileName: "code.js"
-  },
-  python: {
-    image: "codezy-python-judge",
-    fileName: "code.py"
-  }
+  javascript: { image: "codezy-js-judge", fileName: "code.js" },
+  python: { image: "codezy-python-judge", fileName: "code.py" }
 };
 
-export async function runJavaScriptJudge(submissionId) {
-  const submission = await Submission.findById(submissionId);
-  
-  // 0. Initial Status Update
-  submission.status = "running";
-  await submission.save();
+// --- DRIVER TEMPLATES ---
+const DRIVERS = {
+  python: `
+if __name__ == "__main__":
+    import sys, json
+    try:
+        input_data = sys.stdin.read().strip()
+        if not input_data:
+            sys.exit(0)
+        lines = input_data.split('\\n')
+        args = [json.loads(line) for line in lines if line.strip()]
+        result = solution(*args)
+        print(json.dumps(result))
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+`,
+  javascript: `
+const fs = require('fs');
+try {
+    const input = fs.readFileSync(0, 'utf-8').trim();
+    if (input) {
+        const args = input.split('\\n').filter(l=>l.trim()).map(l => JSON.parse(l));
+        const result = solution(...args);
+        console.log(JSON.stringify(result));
+    }
+} catch (e) {
+    console.error(e.message);
+    process.exit(1);
+}
+`
+};
 
-  // 1. Validate Language Support
-  // We access language from 'codeSubmission' object as per your schema
-  const langKey = submission.codeSubmission.language.toLowerCase();
-  const langConfig = LANGUAGE_CONFIG[langKey];
+export async function runJavaScriptJudge(payload) {
+  const { submissionId, isDryRun, code, language, testCases: customTestCases } = payload;
 
-  if (!langConfig) {
-    submission.status = "runtime-error";
-    console.error(`❌ Unsupported Language: ${langKey}`);
+  let submission = null;
+  let sourceCode = "";
+  let langKey = "";
+  let testCasesToRun = [];
+
+  // --- INITIALIZATION ---
+  if (!isDryRun && submissionId) {
+    submission = await Submission.findById(submissionId);
+    if (!submission) throw new Error("Submission not found");
+    submission.status = "running";
     await submission.save();
-    return;
+
+    sourceCode = submission.codeSubmission.sourceCode;
+    langKey = submission.codeSubmission.language.toLowerCase();
+    testCasesToRun = await TestCase.find({ problem: submission.content });
+  } else {
+    sourceCode = code;
+    langKey = (language || "").toLowerCase();
+    testCasesToRun = Array.isArray(customTestCases) ? customTestCases : (customTestCases ? [customTestCases] : [{input:"", output:""}]);
   }
 
-  // 2. Fetch Test Cases
-  const testCases = await TestCase.find({ problem: submission.content }); 
+  const langConfig = LANGUAGE_CONFIG[langKey];
+  if (!langConfig) {
+    if (submission) { submission.status = "runtime-error"; await submission.save(); }
+    return { status: "runtime-error", message: "Unsupported Language" };
+  }
 
-  let passedCount = 0;
-  const detailedResults = [];
-  const sourceCode = submission.codeSubmission.sourceCode;
-
-  // 3. Setup Temp Directory
+  const fullExecutableCode = `${sourceCode}\n\n${DRIVERS[langKey] || ""}`;
   const baseTempDir = path.join(process.cwd(), "temp_submissions");
   if (!fs.existsSync(baseTempDir)) fs.mkdirSync(baseTempDir, { recursive: true });
 
-  // --- EXECUTION LOOP ---
-  for (const testCase of testCases) {
-    const tempDir = path.join(baseTempDir, `${submissionId}-${Date.now()}`);
+  let passedCount = 0;
+  let detailedResults = [];
+  let finalStatus = "accepted"; 
+
+  for (const testCase of testCasesToRun) {
+    if (!testCase) continue;
+
+    const tempDir = path.join(baseTempDir, `${isDryRun ? 'dry' : submissionId}-${Date.now()}`);
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
     try {
-      // Write Code & Input
-      fs.writeFileSync(path.join(tempDir, langConfig.fileName), sourceCode);
-      // Ensure input is a string; default to empty if missing
-      fs.writeFileSync(path.join(tempDir, "input.txt"), testCase.input || "");
+      fs.writeFileSync(path.join(tempDir, langConfig.fileName), fullExecutableCode);
+      const inputContent = (testCase.input === undefined || testCase.input === null) ? "" : testCase.input;
+      fs.writeFileSync(path.join(tempDir, "input.txt"), inputContent.toString());
 
-      // Run Docker
       const cmd = `docker run --rm --network none -v "${tempDir}:/workspace" ${langConfig.image}`;
-
+      
       const result = await new Promise((resolve) => {
         exec(cmd, (err, stdout, stderr) => {
-          // Cleanup immediately to keep disk clean
-          try {
-            if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-          } catch (e) { console.error("Cleanup error:", e); }
+          try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) {}
 
-          if (err && stderr) {
-            // Docker infrastructure failure (not user code failure)
-            console.error("❌ Docker System Error:", stderr);
-            return resolve({ status: "RUNTIME_ERROR", output: "" });
-          }
+          if (err && stderr) return resolve({ status: "RUNTIME_ERROR", error: stderr });
 
           try {
-            const cleanOutput = stdout.trim();
-            if (!cleanOutput) return resolve({ status: "RUNTIME_ERROR", output: "" });
-            resolve(JSON.parse(cleanOutput));
+             const rawOutput = stdout.trim();
+             if (!rawOutput) return resolve({ status: "OK", output: "" });
+
+             // 🔥 FIX: Parse the Docker Container's JSON wrapper
+             // The container prints: {"status": "OK", "output": "[3, 2, 1]", "time": 136}
+             // We need to parse this and extract just the 'output' field.
+             
+             let parsedDockerOutput;
+             try {
+                parsedDockerOutput = JSON.parse(rawOutput);
+             } catch (e) {
+                // If parsing fails, maybe it's raw text (e.g. error message)
+                return resolve({ status: "RUNTIME_ERROR", error: "Invalid Container Output: " + rawOutput });
+             }
+
+             // Check if container reported an error
+             if (parsedDockerOutput.status !== "OK") {
+                return resolve({ status: "RUNTIME_ERROR", error: parsedDockerOutput.error || "Unknown Error" });
+             }
+
+             // Extract the REAL output string (e.g., "[3, 2, 1]")
+             resolve({ status: "OK", output: parsedDockerOutput.output });
+
           } catch (e) {
-            console.error("❌ JSON Parse Failed:", stdout);
-            resolve({ status: "RUNTIME_ERROR", output: "" });
+             resolve({ status: "RUNTIME_ERROR", error: "Output Parsing Error" });
           }
         });
       });
 
-    // --- VERDICT LOGIC (CRASH PROOF & FLEXIBLE) ---
-
-      // Helper: Remove ALL whitespace for comparison (e.g., "[0, 1]" becomes "[0,1]")
+      // --- VERDICT LOGIC ---
       const normalize = (str) => (str || "").replace(/\s+/g, '');
+      const expectedRaw = testCase.expectedOutput || testCase.output || "";
+      const actualDisplay = result.error ? "" : result.output; // This should now be just "[3, 2, 1]"
       
-      // Helper: Just trim edges for display (we want to show the user exactly what they printed)
-      const safeTrim = (str) => (str || "").trim();
-
-      // 1. Prepare strings for comparison vs display
-      const expectedDisplay = safeTrim(testCase.expectedOutput || testCase.output);
-      const actualDisplay = safeTrim(result.output);
-      
-      const expectedNormalized = normalize(expectedDisplay);
-      const actualNormalized = normalize(actualDisplay);
-
-      // 2. Determine Status for THIS test case
       let caseStatus = "ACCEPTED";
-      if (result.status === "TLE") {
-        caseStatus = "TLE";
-      } else if (result.status !== "OK") {
-        caseStatus = "RUNTIME_ERROR";
-      } else if (actualNormalized !== expectedNormalized) { 
-        // Compare the NORMALIZED versions
-        caseStatus = "WRONG_ANSWER";
+      if (result.status === "TLE") caseStatus = "TLE";
+      else if (result.status === "RUNTIME_ERROR") caseStatus = "RUNTIME_ERROR";
+      else if (normalize(actualDisplay) !== normalize(expectedRaw)) caseStatus = "WRONG_ANSWER";
+
+      if (caseStatus === "ACCEPTED") passedCount++;
+      else {
+         if (finalStatus === "accepted") {
+            if (caseStatus === "TLE") finalStatus = "time-limit-exceeded";
+            else if (caseStatus === "RUNTIME_ERROR") finalStatus = "runtime-error";
+            else finalStatus = "wrong-answer";
+         }
       }
 
-      const isCorrect = (caseStatus === "ACCEPTED");
-      if (isCorrect) passedCount++;
-
-      // 3. Create Detailed Result Object
-      const resultEntry = {
-        testCase: testCase._id,
+      detailedResults.push({
         status: caseStatus,
-        passed: isCorrect,
-        output: actualDisplay,           // Save original (trimmed) output for display
-        expectedOutput: expectedDisplay, // Save original (trimmed) expectation
-        executionTime: result.time || 0,
-        errorMessage: result.status !== "OK" ? (result.error || result.status) : null
-      };
-
-      detailedResults.push(resultEntry);
-
-      // FAIL FAST: If this case failed, stop judging and save result immediately
-      if (!isCorrect) {
-        let finalStatus = "wrong-answer";
-        if (caseStatus === "TLE") finalStatus = "time-limit-exceeded";
-        else if (caseStatus === "RUNTIME_ERROR") finalStatus = "runtime-error";
-
-        submission.status = finalStatus;
-        submission.testResults = detailedResults; // Save the failure details
-        submission.executionStats = { passed: passedCount, total: testCases.length };
-        await submission.save();
-        console.log(`❌ Verdict: ${finalStatus} (${langKey})`);
-        return; // Exit loop, do not run remaining cases
-      }
+        output: actualDisplay,
+        expectedOutput: expectedRaw,
+        input: testCase.input,
+        error: result.error
+      });
 
     } catch (err) {
-      console.error("Loop Error:", err);
+      console.error("Execution Loop Error:", err);
       if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     }
   }
 
-  // If loop finishes, ALL cases passed
-  submission.status = "accepted";
-  submission.testResults = detailedResults;
-  submission.executionStats = { passed: passedCount, total: testCases.length };
-  await submission.save();
-  console.log(`✅ Verdict: ACCEPTED (${langKey})`);
+  const executionStats = { passed: passedCount, total: testCasesToRun.length };
+
+  if (!isDryRun && submission) {
+    submission.status = finalStatus;
+    submission.testResults = detailedResults;
+    submission.executionStats = executionStats;
+    await submission.save();
+    return { success: true, status: finalStatus };
+  } else {
+    return {
+      success: true,
+      status: finalStatus,
+      testResults: detailedResults,
+      executionStats
+    };
+  }
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiTrash2, FiSave } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSave, FiCode } from 'react-icons/fi'; // Added FiCode
 import problemService from '../../services/problemService/problemService';
+import toast from 'react-hot-toast'; // Use professional notifications
 
 const AddProblem = () => {
     const navigate = useNavigate();
@@ -16,21 +17,34 @@ const AddProblem = () => {
         description: ''
     });
 
-    // Dynamic Test Cases State
-    const [testCases, setTestCases] = useState([
-        { input: '', output: '' } // Start with 1 empty row
+    // Starter Code State (Boilerplate)
+    const [starterCodes, setStarterCodes] = useState([
+        { language: 'javascript', code: '// Write your JavaScript solution here\nfunction solution(input) {\n    return;\n}' },
+        { language: 'python', code: '# Write your Python solution here\ndef solution(input):\n    pass' },
+        { language: 'cpp', code: '// Write your C++ solution here\n#include <iostream>\nusing namespace std;\n\nclass Solution {\npublic:\n    void solve() {\n        \n    }\n};' }
     ]);
 
-    // Handlers
+    // Dynamic Test Cases State
+    const [testCases, setTestCases] = useState([
+        { input: '', output: '' }
+    ]);
+
+    // --- Handlers ---
+
     const handleInputChange = (e) => {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
 
-    // Auto-generate slug from title
     const handleTitleChange = (e) => {
         const title = e.target.value;
         const slug = title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
         setForm({ ...form, title, slug });
+    };
+
+    const handleStarterCodeChange = (index, value) => {
+        const newCodes = [...starterCodes];
+        newCodes[index].code = value;
+        setStarterCodes(newCodes);
     };
 
     // Test Case Handlers
@@ -45,42 +59,44 @@ const AddProblem = () => {
     };
 
     const removeTestCase = (index) => {
-        if (testCases.length === 1) return; // Prevent deleting the last one
+        if (testCases.length === 1) return;
         setTestCases(testCases.filter((_, i) => i !== index));
     };
 
-    // Submit Logic
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
+    // --- Submit Logic ---
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
 
-  try {
-    const payload = {
-      title: form.title,
-      description: form.description,          // required
-      problemStatement: form.description,     // required for challenge
-      difficulty:
-        form.difficulty === "Easy" ? "beginner" :
-        form.difficulty === "Medium" ? "intermediate" :
-        "advanced",
-      contentType: "challenge",
-      examples: testCases.map(tc => ({
-        input: tc.input,
-        output: tc.output
-      }))
+        try {
+            const payload = {
+                title: form.title,
+                description: form.description,
+                problemStatement: form.description,
+                difficulty:
+                    form.difficulty === "Easy" ? "beginner" :
+                    form.difficulty === "Medium" ? "intermediate" :
+                    "advanced",
+                contentType: "challenge",
+                slug: form.slug, // Ensure slug is sent
+                examples: testCases.map(tc => ({
+                    input: tc.input,
+                    output: tc.output
+                })),
+                starterCode: starterCodes // <--- Send the templates to backend
+            };
+
+            await problemService.createProblem(payload);
+
+            toast.success('Problem Created Successfully!');
+            navigate('/problems');
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Failed to create problem');
+        } finally {
+            setLoading(false);
+        }
     };
-
-    await problemService.createProblem(payload);
-
-    alert('Problem Created Successfully!');
-    navigate('/problems');
-  } catch (error) {
-    console.error(error);
-    alert(error.response?.data?.message || 'Failed to create problem');
-  } finally {
-    setLoading(false);
-  }
-};
 
     return (
         <div className="min-h-screen bg-gray-900 text-white p-10 flex justify-center">
@@ -130,7 +146,6 @@ const AddProblem = () => {
                             <option value="Easy">Easy</option>
                             <option value="Medium">Medium</option>
                             <option value="Hard">Hard</option>
-
                         </select>
                     </div>
 
@@ -147,8 +162,30 @@ const AddProblem = () => {
                         />
                     </div>
 
+                    {/* --- STARTER CODE SECTION (NEW) --- */}
+                    <div className="pt-4 border-t border-gray-700">
+                        <h3 className="text-xl font-bold text-gray-200 mb-4 flex items-center gap-2">
+                             <FiCode /> Starter Code Templates
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {starterCodes.map((template, index) => (
+                                <div key={template.language} className="bg-gray-750 p-4 rounded border border-gray-700">
+                                    <label className="text-sm font-bold text-blue-400 uppercase mb-2 block">
+                                        {template.language} Template
+                                    </label>
+                                    <textarea
+                                        value={template.code}
+                                        onChange={(e) => handleStarterCodeChange(index, e.target.value)}
+                                        className="w-full h-32 bg-gray-900 border border-gray-600 rounded p-2 text-xs font-mono text-gray-300 focus:border-blue-500 outline-none"
+                                        placeholder={`Enter boilerplate code for ${template.language}...`}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     {/* --- TEST CASES SECTION --- */}
-                    <div className="pt-6">
+                    <div className="pt-6 border-t border-gray-700">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xl font-bold text-gray-200">Test Cases</h3>
                             <button
@@ -202,7 +239,7 @@ const AddProblem = () => {
                             type="submit"
                             disabled={loading}
                             className={`w-full flex items-center justify-center gap-2 py-3 rounded font-bold text-lg transition
-                ${loading ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-white'}`}
+                                ${loading ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-white'}`}
                         >
                             {loading ? 'Publishing...' : <><FiSave /> Publish Problem</>}
                         </button>

@@ -22,18 +22,36 @@ const submissionService = {
   },
   getSubmissionById: async (submissionId) => {
     try {
-      const token = localStorage.getItem("token");  
-        const config = {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-        };
+      const token = localStorage.getItem("token");
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      };
       const response = await axios.get(`${BASE_URL}/${submissionId}`, config);
       return response;
     } catch (error) {
       throw error;
     }
+  },
+  runCode: async (language, sourceCode, problemId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      };
+      const response = await axios.post(`${BASE_URL}/run`, {
+        language,
+        code: sourceCode,
+        problemId
+      }, config);
+      return response;
+    } catch (error) {
+      throw error;
     }
+  }
 
 };
 

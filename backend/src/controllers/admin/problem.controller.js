@@ -4,8 +4,10 @@ import TestCase from '../../models/testCase.model.js';
 export const createProblem = async (req, res) => {
   try {
     // 1. Extract testCases from the body, keep the rest as problemData
-    const { testCases, ...problemData } = req.body;
-
+    const { ...problemData } = req.body;
+    const testCases=problemData.examples;
+    console.log('testCases',testCases);
+    console.log('problemData',problemData);
     // 2. Create the Problem (Content)
     const problem = await Content.create({
       ...problemData,

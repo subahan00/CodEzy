@@ -2,21 +2,26 @@
 import Content from '../../models/Content.model.js';    
 import mongoose from 'mongoose';
 import Submission from '../../models/submission.model.js';
-import { addSubmissionToQueue } from '../../queues/submissionQueue.js';
+import { addSubmissionToQueue, submissionQueue } from '../../queues/submissionQueue.js'; // Ensure submissionQueue is imported
+import TestCase from '../../models/testCase.model.js';
+import { QueueEvents } from 'bullmq'; // 👈 IMPORT THIS
+
+// 1. Create QueueEvents listener (connects to Redis)
+const queueEvents = new QueueEvents('submission-queue', {
+  connection: {
+    host: '127.0.0.1', 
+    port: 6379
+  }
+});
 
 export const createSubmission = async (req, res) => {
   try {
     const { contentId, language, sourceCode } = req.body;
 
-    // 1. Validate input
     if (!contentId || !language || !sourceCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // 2. Validate problem
     const problem = await Content.findOne({
       _id: contentId,
       isPublished: true,
@@ -25,32 +30,23 @@ export const createSubmission = async (req, res) => {
     });
 
     if (!problem) {
-      return res.status(404).json({
-        success: false,
-        message: 'Problem not found or not accessible'
-      });
+      return res.status(404).json({ success: false, message: 'Problem not found or not accessible' });
     }
 
-    // 3. Calculate attempt number
     const previousAttempts = await Submission.countDocuments({
       user: req.user.userId,
       content: contentId
     });
 
-    // 4. Create submission
     const submission = await Submission.create({
       user: req.user.userId,
       content: contentId,
-      codeSubmission: {
-        language,
-        sourceCode
-      },
+      codeSubmission: { language, sourceCode },
       attemptNumber: previousAttempts + 1,
       status: 'pending'
     });
 
-   // 5. Trigger Judge Asynchronously (Do not await)
-   await addSubmissionToQueue(submission._id);
+    await addSubmissionToQueue(submission._id);
 
     res.status(201).json({
       success: true,
@@ -60,76 +56,86 @@ export const createSubmission = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 export const getMySubmissions = async (req, res) => {
   try {
-    const submissions = await Submission.find({
-      user: req.user.userId
-    })
+    const submissions = await Submission.find({ user: req.user.userId })
       .populate('content', 'title slug difficulty')
       .sort({ createdAt: -1 })
-      .select(
-        `
-        status
-        attemptNumber
-        executionStats
-        score
-        createdAt
-        `
-      );
+      .select('status attemptNumber executionStats score createdAt');
 
-    res.json({
-      success: true,
-      data: submissions
-    });
+    res.json({ success: true, data: submissions });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 export const getSubmissionById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid submission ID'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid submission ID' });
     }
     const submission = await Submission.findOne({
       _id: id,
       user: req.user.userId
-    }).populate('content', 'title slug difficulty')
-    .sort({ createdAt: -1 })
+    })
+    .populate('content', 'title slug difficulty')
     .select('status attemptNumber executionStats score createdAt testResults codeSubmission');
+
     if (!submission) {
-      return res.status(404).json({
-        success: false,
-        message: 'Submission not found'
-      });
+      return res.status(404).json({ success: false, message: 'Submission not found' });
     }
-    res.json({
-      success: true,
-      data: submission
-    });
-  }
-  catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.json({ success: true, data: submission });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };  
+
+// 2. Updated RUN CODE Function
+export const runCode = async (req, res) => {
+  try {
+    const { language, code, problemId } = req.body;
+    // Fetch the Problem
+    const problem = await Content.findById(problemId);
+    if (!problem) return res.status(404).json({ message: "Problem not found" });
+
+    // Fetch Sample Test Case
+    const sampleTestCase = await TestCase.findOne({ problem: problemId });
+    console.log('sampleTestCase',sampleTestCase);
+    if (!sampleTestCase) {
+        return res.status(400).json({ message: "No test cases found for this problem" });
+    }
+
+    // Add Job to Queue
+    const job = await submissionQueue.add('run', {
+      language,
+      code,
+      testCases: [sampleTestCase], // ✅ Send as Array for the Worker
+      isDryRun: true
+    });
+
+    // 3. WAIT for the Worker to finish (Timeout: 10s)
+    // This allows us to return the actual output to the frontend
+    const result = await job.waitUntilFinished(queueEvents, 10000); 
+
+    res.json({ 
+      success: true, 
+      data: result // ✅ Contains the actual test results
+    });
+
+  } catch (error) {
+    console.error("Run Code Error:", error);
+    res.status(500).json({ success: false, message: error.message || "Execution failed" });
+  }
+};
+
 export default {
   createSubmission,
-  getMySubmissions
-  ,
+  getMySubmissions,
+  runCode,
   getSubmissionById
-};  
+};

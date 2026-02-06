@@ -1,73 +1,118 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
-import axios from 'axios';
-import { usePollSubmission } from '../../hooks/usePollSubmission'; // The hook we made earlier
-import OutputConsole from './OutputConsole'; // We will build this in Step 7
+import { FiPlay, FiSend } from 'react-icons/fi';
+import toast from 'react-hot-toast';
+import { usePollSubmission } from '../../hooks/usePollSubmission'; 
+import OutputConsole from './OutputConsole'; 
 import submissionService from '../../services/submissionService/submissionService';
+
 const CodeEditor = ({ code, setCode, language, setLanguage, problemId }) => {
-  const { startPolling, stopPolling, status, result, error } = usePollSubmission();
+  const { startPolling, status: submitStatus, result: submitResult, error: submitError } = usePollSubmission();
   
-  // Handlers
+  const [runLoading, setRunLoading] = useState(false);
+  const [runOutput, setRunOutput] = useState(null);
+
+  useEffect(() => {
+    if (submitStatus === 'completed' && submitResult) {
+       if (submitResult.status === 'accepted') {
+         toast.success("🏆 Accepted! Great work.");
+       } else {
+         toast.error(`❌ Verdict: ${submitResult.status}`);
+       }
+    }
+  }, [submitStatus, submitResult]);
+
   const handleEditorChange = (value) => {
     setCode(value);
   };
 
+  const handleRun = async () => {
+    if (!problemId) return toast.error("Problem ID missing");
+    
+    setRunLoading(true);
+    setRunOutput(null);
+    const loadingToast = toast.loading("Running sample tests...");
+    console.log('run code called')
+    console.log(language, code, problemId)
+    try {
+      const res = await submissionService.runCode(language, code, problemId);
+
+      toast.dismiss(loadingToast);
+      toast.success("Run complete");
+      
+      // 🔥 FIX: Access res.data.data (The inner object with status/results)
+      // res.data is the HTTP body, res.data.data is your payload
+      setRunOutput(res.data.data); 
+
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.message || "Run failed");
+      setRunOutput({ error: err.message });
+    } finally {
+      setRunLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!problemId) return alert("Problem ID missing");
+    if (!problemId) return toast.error("Problem ID missing");
+    
+    setRunOutput(null); 
 
     try {
-      // 1. Send Submission to Backend
-      // NOTE: Replace with your actual backend URL
       const response = await submissionService.createSubmission(problemId, language, code);
-      console.log("res-",response)
       const { submissionId } = response.data.data;
 
-      // 2. Start Polling for results
+      toast.success("Submitted! Polling results...");
       startPolling(submissionId);
 
     } catch (err) {
       console.error(err);
-      alert("Failed to submit code: " + (err.response?.data?.message || err.message));
+      toast.error(err.response?.data?.message || "Failed to submit code");
     }
   };
 
+  // Logic to switch between Run output and Submit output
+  const displayStatus = runLoading ? 'running' : (runOutput ? 'completed' : submitStatus);
+  const displayResult = runOutput || submitResult;
+  const displayError = runOutput?.error || submitError;
+
   return (
-    <div className="flex flex-col h-full">
-      {/* --- TOP BAR: Language & Run Buttons --- */}
-      <div className="bg-gray-800 p-2 flex justify-between items-center border-b border-gray-700">
-        
-        {/* Language Selector */}
+    <div className="flex flex-col h-full bg-[#1e1e1e] border-l border-gray-700">
+      
+      {/* Top Bar */}
+      <div className="flex justify-between items-center p-2 bg-[#2d2d2d] border-b border-gray-700">
         <select 
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
-          className="bg-gray-700 text-white px-2 py-1 rounded text-sm focus:outline-none"
+          className="bg-gray-800 text-white text-xs p-1.5 rounded border border-gray-600 outline-none focus:border-blue-500"
         >
-          <option value="python">Python</option>
           <option value="javascript">JavaScript</option>
+          <option value="python">Python</option>
+          <option value="cpp">C++</option>
         </select>
 
-        {/* Submit Button */}
-        <button
-          onClick={handleSubmit}
-          disabled={status === 'pending' || status === 'running'}
-          className={`px-4 py-1 rounded text-sm font-bold transition-colors
-            ${status === 'running' 
-              ? 'bg-yellow-600 cursor-wait' 
-              : 'bg-green-600 hover:bg-green-500'}`}
-        >
-          {status === 'running' ? 'Running...' : 'Submit Code'}
-        </button>
+        <div className="flex gap-2">
+           <button
+             onClick={handleRun}
+             disabled={runLoading || submitStatus === 'running'}
+             className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition disabled:opacity-50"
+           >
+             <FiPlay size={12} /> Run
+           </button>
+
+           <button
+             onClick={handleSubmit}
+             disabled={submitStatus === 'running' || runLoading}
+             className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-bold rounded transition disabled:opacity-50
+               ${submitStatus === 'running' ? 'bg-green-800 cursor-wait' : 'bg-green-600 hover:bg-green-500'}`}
+           >
+             <FiSend size={12} /> {submitStatus === 'running' ? 'Pending...' : 'Submit'}
+           </button>
+        </div>
       </div>
 
-      {/* --- MIDDLE: Monaco Editor --- */}
+      {/* Editor */}
       <div className="flex-grow overflow-hidden relative">
-         {/* Helper Overlay for "Running" state */}
-         {status === 'running' && (
-           <div className="absolute inset-0 z-10 bg-black/50 flex items-center justify-center backdrop-blur-sm">
-             <div className="text-white font-mono animate-pulse">Running Test Cases...</div>
-           </div>
-         )}
-
         <Editor
           height="100%"
           theme="vs-dark"
@@ -82,8 +127,14 @@ const CodeEditor = ({ code, setCode, language, setLanguage, problemId }) => {
           }}
         />
       </div>
-      <div className="h-1/3 border-t border-gray-700 bg-black">
-        <OutputConsole status={status} result={result} error={error} />
+
+      {/* Console */}
+      <div className="h-1/3 border-t border-gray-700 bg-[#1e1e1e]">
+        <OutputConsole 
+           status={displayStatus} 
+           result={displayResult} 
+           error={displayError} 
+        />
       </div>
     </div>
   );
