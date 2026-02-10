@@ -182,7 +182,11 @@ const AuthPage = () => {
         const token = response.data.token;
         localStorage.setItem("token", token);
         localStorage.setItem("user", JSON.stringify(response.data.user));
-        Navigate("/profile");
+        if (response.data.user.role === "admin") {
+          Navigate("/admin/dashboard");
+        } else {
+          Navigate("/profile");
+        }
       }
     } catch (err) {
       // Improved error handling to catch string errors or response errors

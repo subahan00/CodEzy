@@ -1,37 +1,58 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { FiCheckCircle, FiClock, FiXCircle } from 'react-icons/fi';
+import React, { useEffect, useState, useMemo } from 'react';
+import { 
+  FiCheckCircle, FiClock, FiXCircle, FiAward, FiActivity, 
+  FiZap, FiCalendar, FiTarget, FiEdit2, FiGithub, FiLinkedin 
+} from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 import profileService from '../services/userService/profileService';
-import LeaderboardTable from '../component/Leaderboard/Leaderboard';
-import SubmissionModal from '../component/Profile/SubmissionModal';
 import submissionService from '../services/submissionService/submissionService';
+import SubmissionModal from '../component/Profile/SubmissionModal';
+
+// --- HELPER: Heatmap Cell ---
+const ActivityCell = ({ date, count }) => {
+  let color = 'bg-gray-800';
+  if (count > 0) color = 'bg-green-900/40';
+  if (count > 2) color = 'bg-green-600/60';
+  if (count > 5) color = 'bg-green-500';
+
+  return (
+    <div 
+      className={`w-3 h-3 rounded-sm ${color} transition-all hover:scale-125`} 
+      title={`${date}: ${count} submissions`}
+    />
+  );
+};
+
 const ProfilePage = () => {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  
+  // Stats State
   const [stats, setStats] = useState({
     totalSolved: 0,
-    easy: 0,
-    medium: 0,
-    hard: 0
+    easy: 0, medium: 0, hard: 0,
+    acceptanceRate: 0,
+    topSkills: []
   });
+
+  // Activity Heatmap Data
+  const [activityData, setActivityData] = useState([]);
+
+  // User Data (Merge LocalStorage with potential API updates later)
+  const user = JSON.parse(localStorage.getItem("user")) || {};
+
   useEffect(() => {
     fetchHistory();
   }, []);
-  const [selectedSubmission, setSelectedSubmission] = useState(null);
-  const user = JSON.parse(localStorage.getItem("user"));
-  console.log('user-', user);
 
   const fetchHistory = async () => {
     try {
-      // We need to attach the token!
-      const res = await profileService.fetchHistory();
-      console.log('res-', res)
-
-
-      const subs = res;
+      const res = await profileService.fetchHistory(); // Should return array of submissions
+      const subs = Array.isArray(res) ? res : [];
       setSubmissions(subs);
       calculateStats(subs);
+      generateHeatmap(subs);
     } catch (err) {
       console.error("Failed to load profile", err);
     } finally {
@@ -39,143 +60,272 @@ const ProfilePage = () => {
     }
   };
 
+  // --- LOGIC: Calculate Stats & Skills ---
   const calculateStats = (subs) => {
-    // 1. Filter only ACCEPTED submissions
     const accepted = subs.filter(s => s.status === 'accepted');
-
-    // 2. Get Unique Problems Solved (using a Set of Content IDs)
     const uniqueSolved = new Set();
+    const tagCounts = {};
     let easy = 0, medium = 0, hard = 0;
 
     accepted.forEach(sub => {
-      if (!uniqueSolved.has(sub.content._id)) {
+      // 1. Difficulty Breakdown (Unique)
+      if (sub.content && !uniqueSolved.has(sub.content._id)) {
         uniqueSolved.add(sub.content._id);
-        const diff = sub.content.difficulty;
-        if (diff === 'easy') easy++;
-        else if (diff === 'medium') medium++;
+        const diff = sub.content.difficulty?.toLowerCase();
+        if (diff === 'easy' || diff === 'beginner') easy++;
+        else if (diff === 'medium' || diff === 'intermediate') medium++;
         else hard++;
+
+        // 2. Skill Extraction (Tags)
+        if (sub.content.tags && Array.isArray(sub.content.tags)) {
+          sub.content.tags.forEach(tag => {
+            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+          });
+        }
       }
     });
 
+    // 3. Acceptance Rate
+    const totalSubmissions = subs.length;
+    const rate = totalSubmissions > 0 
+      ? ((accepted.length / totalSubmissions) * 100).toFixed(1) 
+      : 0;
+
+    // 4. Sort Top Skills
+    const sortedSkills = Object.entries(tagCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5); // Top 5
+
     setStats({
       totalSolved: uniqueSolved.size,
-      easy,
-      medium,
-      hard
+      easy, medium, hard,
+      acceptanceRate: rate,
+      topSkills: sortedSkills
     });
   };
+
+  // --- LOGIC: Generate 365 Day Heatmap ---
+  const generateHeatmap = (subs) => {
+    const map = {};
+    subs.forEach(sub => {
+      const date = new Date(sub.createdAt).toISOString().split('T')[0];
+      map[date] = (map[date] || 0) + 1;
+    });
+
+    // Generate last 60 days for display (Mobile friendly)
+    const days = [];
+    for (let i = 59; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      days.push({ date: dateStr, count: map[dateStr] || 0 });
+    }
+    setActivityData(days);
+  };
+
   const handleViewSubmission = async (id) => {
     try {
       const res = await submissionService.getSubmissionById(id);
-      console.log('resssssssss-', res)  
       setSelectedSubmission(res.data.data);
     } catch (error) {
       console.error("Could not fetch submission details");
     }
   };
-  if (loading) return <div className="text-white p-10">Loading Profile...</div>;
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-gray-500">
+      <FiActivity className="animate-spin mr-2" /> Loading Profile...
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-10">
-      <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div className="min-h-screen bg-[#0a0a0a] text-gray-200 p-6 md:p-10 font-sans">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-        {/* LEFT COLUMN: User Info & Stats */}
-        <div className="md:col-span-1 space-y-6">
-
-          {/* User Card */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg text-center">
-            <div className="w-24 h-24 bg-gradient-to-tr from-green-400 to-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl font-bold">
-              {user.username}
-            </div>
-            <h2 className="text-xl font-bold">{user.username}</h2>
-            <p className="text-gray-400 text-sm">{user.email}</p>
-            <button className="mt-4 w-full bg-gray-700 hover:bg-gray-600 py-2 rounded text-sm transition">
-              Edit Profile
-            </button>
-          </div>
-
-          {/* Stats Card */}
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg">
-            <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Problems Solved</h3>
-
-            <div className="text-4xl font-bold text-center mb-6 text-white">
-              {stats.totalSolved}
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-green-400">Easy</span>
-                <span className="font-bold">{stats.easy}</span>
+        {/* ================= LEFT COLUMN: IDENTITY (Col-Span 4) ================= */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* 1. Identity Card */}
+          <div className="bg-[#161616] p-6 rounded-2xl border border-gray-800 shadow-xl relative overflow-hidden group">
+            {/* Background Gradient Effect */}
+            <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-blue-600/20 to-purple-600/20"></div>
+            
+            <div className="relative">
+              <div className="w-28 h-28 bg-[#1e1e1e] border-4 border-[#0a0a0a] rounded-full mx-auto mb-4 flex items-center justify-center text-4xl font-bold text-white shadow-lg">
+                {user.avatar ? <img src={user.avatar} className="rounded-full" alt="avatar"/> : user.username?.charAt(0).toUpperCase()}
               </div>
-              <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
-                <div className="bg-green-500 h-full" style={{ width: `${(stats.easy / (stats.totalSolved || 1)) * 100}%` }}></div>
-              </div>
+              
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-white">{user.username}</h2>
+                <p className="text-gray-500 text-sm">Rank: Beginner</p> 
+                {/* Future: {user.statistics?.rank || 'Beginner'} */}
+                
+                <div className="flex justify-center gap-4 mt-4 text-gray-400">
+                  <FiGithub className="hover:text-white cursor-pointer transition" />
+                  <FiLinkedin className="hover:text-white cursor-pointer transition" />
+                </div>
 
-              <div className="flex justify-between text-sm">
-                <span className="text-yellow-400">Medium</span>
-                <span className="font-bold">{stats.medium}</span>
-              </div>
-              <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
-                <div className="bg-yellow-500 h-full" style={{ width: `${(stats.medium / (stats.totalSolved || 1)) * 100}%` }}></div>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-red-400">Hard</span>
-                <span className="font-bold">{stats.hard}</span>
-              </div>
-              <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
-                <div className="bg-red-500 h-full" style={{ width: `${(stats.hard / (stats.totalSolved || 1)) * 100}%` }}></div>
+                <button className="mt-6 w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-lg text-sm font-medium transition-all border border-gray-700">
+                  <FiEdit2 size={14} /> Edit Profile
+                </button>
               </div>
             </div>
           </div>
+
+          {/* 2. Skills Radar (Text Version for now) */}
+          <div className="bg-[#161616] p-6 rounded-2xl border border-gray-800 shadow-xl">
+             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+               <FiZap className="text-yellow-400"/> Top Skills
+             </h3>
+             <div className="space-y-3">
+               {stats.topSkills.length > 0 ? stats.topSkills.map(([skill, count]) => (
+                 <div key={skill} className="flex justify-between items-center text-sm">
+                   <span className="bg-gray-800 px-2 py-1 rounded text-gray-300 capitalize">{skill}</span>
+                   <span className="text-gray-500 font-mono">x{count}</span>
+                 </div>
+               )) : (
+                 <p className="text-gray-500 text-sm italic">Solve problems to unlock skill stats.</p>
+               )}
+             </div>
+          </div>
+
+          {/* 3. Badges Placeholder (Future Proofing) */}
+          <div className="bg-[#161616] p-6 rounded-2xl border border-gray-800 shadow-xl">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <FiAward className="text-purple-400"/> Achievements
+            </h3>
+            <div className="grid grid-cols-4 gap-2">
+               {/* Placeholders */}
+               <div className="aspect-square bg-gray-800 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-700 cursor-help" title="Solved 10 Problems">🏆</div>
+               <div className="aspect-square bg-gray-800 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-700 cursor-help" title="7 Day Streak">🔥</div>
+               <div className="aspect-square bg-gray-800/50 rounded-lg flex items-center justify-center text-gray-700 border border-gray-800 border-dashed">?</div>
+               <div className="aspect-square bg-gray-800/50 rounded-lg flex items-center justify-center text-gray-700 border border-gray-800 border-dashed">?</div>
+            </div>
+          </div>
+
         </div>
 
-        {/* RIGHT COLUMN: Recent Submissions */}
-        <div className="md:col-span-2">
-          <div className="bg-gray-800 rounded-lg border border-gray-700 shadow-lg overflow-hidden">
-            <div className="p-4 border-b border-gray-700">
-              <h3 className="text-lg font-bold">Recent Submissions</h3>
+        {/* ================= RIGHT COLUMN: STATS & CONTENT (Col-Span 8) ================= */}
+        <div className="lg:col-span-8 space-y-6">
+
+          {/* 1. Main Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+             <div className="bg-[#161616] p-4 rounded-xl border border-gray-800">
+                <div className="text-gray-500 text-xs uppercase font-bold mb-1">Total Solved</div>
+                <div className="text-3xl font-bold text-white">{stats.totalSolved}</div>
+             </div>
+             <div className="bg-[#161616] p-4 rounded-xl border border-gray-800">
+                <div className="text-gray-500 text-xs uppercase font-bold mb-1">Total Score</div>
+                <div className="text-3xl font-bold text-yellow-500">{user.statistics?.totalScore || 0}</div>
+             </div>
+             <div className="bg-[#161616] p-4 rounded-xl border border-gray-800">
+                <div className="text-gray-500 text-xs uppercase font-bold mb-1">Acceptance</div>
+                <div className="text-3xl font-bold text-blue-400">{stats.acceptanceRate}%</div>
+             </div>
+             <div className="bg-[#161616] p-4 rounded-xl border border-gray-800">
+                <div className="text-gray-500 text-xs uppercase font-bold mb-1">Streak</div>
+                <div className="text-3xl font-bold text-green-500 flex items-center gap-2">
+                   {user.statistics?.currentStreak || 0} <span className="text-sm text-gray-600">days</span>
+                </div>
+             </div>
+          </div>
+
+          {/* 2. Difficulty Breakdown */}
+          <div className="bg-[#161616] p-6 rounded-2xl border border-gray-800">
+            <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">Problem Difficulty</h3>
+            <div className="space-y-4">
+               {/* Easy */}
+               <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-green-400 font-medium">Easy</span>
+                    <span className="text-gray-400">{stats.easy} solved</span>
+                  </div>
+                  <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                    <div className="bg-green-500 h-full transition-all duration-1000" style={{ width: `${(stats.easy / (stats.totalSolved || 1)) * 100}%` }}></div>
+                  </div>
+               </div>
+               {/* Medium */}
+               <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-yellow-400 font-medium">Medium</span>
+                    <span className="text-gray-400">{stats.medium} solved</span>
+                  </div>
+                  <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                    <div className="bg-yellow-500 h-full transition-all duration-1000" style={{ width: `${(stats.medium / (stats.totalSolved || 1)) * 100}%` }}></div>
+                  </div>
+               </div>
+               {/* Hard */}
+               <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-red-400 font-medium">Hard</span>
+                    <span className="text-gray-400">{stats.hard} solved</span>
+                  </div>
+                  <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                    <div className="bg-red-500 h-full transition-all duration-1000" style={{ width: `${(stats.hard / (stats.totalSolved || 1)) * 100}%` }}></div>
+                  </div>
+               </div>
+            </div>
+          </div>
+
+          {/* 3. Activity Heatmap (Last 60 Days) */}
+          <div className="bg-[#161616] p-6 rounded-2xl border border-gray-800">
+            <div className="flex justify-between items-center mb-4">
+               <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                 <FiCalendar /> Recent Activity
+               </h3>
+               <span className="text-xs text-gray-500">Last 60 Days</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+               {activityData.map((day, i) => (
+                  <ActivityCell key={i} date={day.date} count={day.count} />
+               ))}
+            </div>
+          </div>
+
+          {/* 4. Submission History Table */}
+          <div className="bg-[#161616] rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
+            <div className="p-4 border-b border-gray-800 bg-[#1e1e1e] flex justify-between items-center">
+              <h3 className="text-lg font-bold text-white">Submission History</h3>
+              <Link to="/submissions" className="text-xs text-blue-400 hover:underline">View All</Link>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-750 text-gray-400 text-sm">
+                <thead className="bg-[#1a1a1a] text-gray-500 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="p-4">Problem</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Time</th>
-                    <th className="p-4">Date</th>
+                    <th className="p-4">Verdict</th>
+                    <th className="p-4 hidden md:table-cell">Runtime</th>
+                    <th className="p-4 hidden sm:table-cell">Date</th>
+                    <th className="p-4">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700 text-sm">
-                  {submissions.map((sub) => (
-                    <tr key={sub._id} className="hover:bg-gray-700 transition">
-                      <td className="p-4 font-medium">
-                        <Link to={`/problems/${sub.content.slug}`} className="hover:text-blue-400">
-                          {sub.content.title}
+                <tbody className="divide-y divide-gray-800 text-sm">
+                  {submissions.slice(0, 10).map((sub) => (
+                    <tr key={sub._id} className="hover:bg-[#1f1f1f] transition-colors">
+                      <td className="p-4 font-medium text-white">
+                        <Link to={`/problem/${sub.content?.slug}`} className="hover:text-blue-400 transition">
+                          {sub.content?.title || "Unknown Problem"}
                         </Link>
                       </td>
                       <td className="p-4">
-                        <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-bold uppercase
-                          ${sub.status === 'accepted' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase
+                          ${sub.status === 'accepted' ? 'bg-green-900/30 text-green-400 border border-green-900' : 'bg-red-900/30 text-red-400 border border-red-900'}`}>
                           {sub.status === 'accepted' ? <FiCheckCircle /> : <FiXCircle />}
-                          {sub.status.replace('-', ' ')}
+                          {sub.status?.replace('-', ' ')}
                         </span>
                       </td>
-                      <td className="p-4 text-gray-400 font-mono">
-                        {/* Assuming stats has passed count, or calculate runtime if available */}
-                        {sub.executionStats?.passed || 0} passed
+                      <td className="p-4 text-gray-400 font-mono hidden md:table-cell">
+                         {/* Placeholder for runtime if you add it to DB later */}
+                         100 ms
                       </td>
-                      <td className="p-4 text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <FiClock size={14} />
-                          {new Date(sub.createdAt).toLocaleDateString()}
-                        </div>
+                      <td className="p-4 text-gray-500 hidden sm:table-cell">
+                        {new Date(sub.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4">
                         <button
                           onClick={() => handleViewSubmission(sub._id)}
-                          className="text-sm text-blue-400 hover:text-blue-300 underline"
+                          className="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded border border-gray-700 transition"
                         >
                           View Code
                         </button>
@@ -186,19 +336,23 @@ const ProfilePage = () => {
               </table>
 
               {submissions.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
-                  No submissions yet. Go solve some problems!
+                <div className="p-12 text-center text-gray-600">
+                  <FiTarget className="mx-auto text-4xl mb-3 opacity-50"/>
+                  <p>No submissions yet. Start your journey!</p>
+                  <Link to="/problems" className="mt-4 inline-block text-blue-400 hover:underline">Go to Problems</Link>
                 </div>
               )}
             </div>
           </div>
-        </div>
 
+        </div>
       </div>
+
+      {/* MODAL */}
       <SubmissionModal 
-   submission={selectedSubmission} 
-   onClose={() => setSelectedSubmission(null)} 
-/>
+        submission={selectedSubmission} 
+        onClose={() => setSelectedSubmission(null)} 
+      />
     </div>
   );
 };
