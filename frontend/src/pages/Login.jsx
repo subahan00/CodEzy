@@ -178,6 +178,7 @@ const AuthPage = () => {
         setTimeout(() => setMode("login"), 2000); 
 
       } else {
+        console.log('creds-',creds);
         const response = await LoginService.Test_login(creds.email, creds.password);
         const token = response.data.token;
         localStorage.setItem("token", token);

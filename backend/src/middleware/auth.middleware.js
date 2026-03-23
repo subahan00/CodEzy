@@ -8,9 +8,8 @@ const authMiddleware = (req, res, next) => {
   }
 
   const token = authHeader.split(' ')[1];
-
   try {
-    const decode = jwt.verify(token, process.env.JWT_SECRET);
+    const decode = jwt.verify(token, process.env.JWT_SECRET, { expiresIn: '24h' });
     req.user = decode;
     next();
   } catch (error) {

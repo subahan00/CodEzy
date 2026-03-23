@@ -7,11 +7,11 @@ import problemService from '../services/problemService/problemService';
 const ProblemPage = () => {
     const { slug } = useParams();
     const [problem, setProblem] = useState(null);
-    
+
     // Editor State
     const [language, setLanguage] = useState("python");
     const [code, setCode] = useState("// Loading starter code...");
-
+    const [lastExecutionResult, setLastExecutionResult] = useState(null);
     useEffect(() => {
         const fetchProblemDetails = async () => {
             try {
@@ -41,7 +41,7 @@ const ProblemPage = () => {
     // When user swaps language in Editor, we must swap the template
     const handleLanguageChange = (newLang) => {
         setLanguage(newLang);
-        
+
         if (problem && problem.starterCode) {
             const template = problem.starterCode.find(sc => sc.language === newLang);
             if (template) {
@@ -63,7 +63,9 @@ const ProblemPage = () => {
 
             {/* LEFT SIDE: Problem Description */}
             <div className="w-1/2 h-full overflow-y-auto border-r border-gray-700 p-4 scrollbar-thin scrollbar-thumb-gray-700">
-                <ProblemDescription problem={problem} />
+                <ProblemDescription problem={problem} 
+                    currentCode={code} language={language} executionResult={lastExecutionResult}
+                    />
             </div>
 
             {/* RIGHT SIDE: Code Editor */}

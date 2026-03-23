@@ -72,7 +72,27 @@ export const getMySubmissions = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// getSubmissionByProblemId
+export const getSubmissionByProblemId = async (req, res) => {
+  try {
+    const { problemId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(problemId)) {
+      return res.status(400).json({ success: false, message: 'Invalid problem ID' });
+    }
+    const submissions = await Submission.find({
+      user: req.user.userId,
+      content: problemId
+    })
+    .populate('content', 'title slug difficulty')
+    .select('status attemptNumber executionStats score createdAt');
 
+    res.json({ success: true, data: submissions });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+  
 export const getSubmissionById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -94,7 +114,7 @@ export const getSubmissionById = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };  
-
+// getSubmissionByPro
 // 2. Updated RUN CODE Function
 export const runCode = async (req, res) => {
   try {

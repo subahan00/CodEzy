@@ -46,22 +46,22 @@ const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // IMPORTANT: select password explicitly
     const user_exist = await User.findOne({ email }).select("+password");
 
     if (!user_exist) {
       return res.status(400).json({ message: "User does not exist" });
     }
 
-    // const isMatch = await bcrypt.compare(password, user_exist.password);
-    // if (!isMatch) {
-    //   return res.status(400).json({ message: "Invalid password" });
-    // }
+    // Direct comparison
+    if (password !== user_exist.password) {
+      return res.status(400).json({ message: "Invalid password" });
+    }
 
     const token = jwt.sign(
-      { userId: user_exist._id,
+      {
+        userId: user_exist._id,
         role: user_exist.role
-       },
+      },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
@@ -73,7 +73,6 @@ const loginUser = async (req, res) => {
         email: user_exist.email,
         role: user_exist.role,
         skillLevel: user_exist.skillLevel,
-        
       },
       token,
       message: "Login successful",
