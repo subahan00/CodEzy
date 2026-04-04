@@ -186,7 +186,7 @@ const AuthPage = () => {
         if (response.data.user.role === "admin") {
           Navigate("/admin/dashboard");
         } else {
-          Navigate("/profile");
+          Navigate("/dashboard");
         }
       }
     } catch (err) {

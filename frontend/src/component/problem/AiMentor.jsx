@@ -5,7 +5,7 @@ import { FiSend, FiCpu, FiUser, FiCode, FiAlertCircle, FiTrendingUp, FiHelpCircl
 const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
   const [prompt, setPrompt] = useState("");
   
-  // NEW: State for the selected persona
+  // State for the selected persona (can now be whatever the user types)
   const [persona, setPersona] = useState("an elite, dark-sarcastic, slightly toxic Senior Developer");
 
   const [chat, setChat] = useState([
@@ -21,7 +21,6 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
   // --- AUTO-CONTEXT GENERATOR ---
   const generateContext = () => {
     let context = `\n\n--- SYSTEM CONTEXT ---\nProblem: ${problem?.title}\nLanguage: ${language}\nCurrent Code:\n${currentCode || 'No code written yet.'}`;
-    // If the user recently ran code and got an error/result, include it!
     if (executionResult) {
       context += `\n\nLast Execution Status: ${executionResult.status}`;
       if (executionResult.error) context += `\nError Output: ${executionResult.error}`;
@@ -34,7 +33,6 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
   const handleAction = async (actionType, customText = "") => {
     let userIntent = customText;
 
-    // Map buttons to specific AI instructions
     if (actionType === 'hint') {
       userIntent = "Analyze my code and give me a small hint for the next step. DO NOT give the full solution.";
     } else if (actionType === 'debug') {
@@ -59,15 +57,13 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
     try {
       const token = localStorage.getItem("token");
 
-      // We send the user's intent + the automated context combined
       const fullPrompt = `${userIntent} ${generateContext()}`;
-
-      // Adjust to your backend's exact payload structure
+      console.log('persona:', persona);
       const res = await axios.post("http://localhost:9999/api/ai/ask", {
         prompt: fullPrompt,
         code: currentCode,
         history,
-        persona // <--- SEND PERSONA TO BACKEND
+        persona // <--- WHATEVER THE USER TYPED IS SENT HERE
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -87,18 +83,24 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
       {/* --- HEADER WITH PERSONA SELECTOR --- */}
       <div className="p-3 bg-[#252526] border-b border-gray-700 flex justify-between items-center">
         <span className="text-sm font-bold text-gray-300">Talk to:</span>
-        <select 
+        
+        {/* REPLACED SELECT WITH INPUT + DATALIST */}
+        <input 
+          type="text"
+          list="persona-suggestions"
           value={persona} 
           onChange={(e) => setPersona(e.target.value)}
-          className="bg-[#161616] text-sm text-purple-400 border border-gray-700 rounded-md px-2 py-1 outline-none cursor-pointer w-48 truncate"
-        >
-          <option value="an elite, dark-sarcastic, slightly toxic Senior Developer">Toxic Senior Dev 😡</option>
-          <option value="a kind, patient, and overly encouraging kindergarten teacher">Friendly Teacher 😇</option>
-          <option value="Yoda from Star Wars">Yoda 👽</option>
-          <option value="Batman, speaking in a dark, brooding, and serious tone">Batman 🦇</option>
-          <option value="a hyperactive, caffeinated startup bro who uses too much crypto slang">Startup Bro 🚀</option>
-          <option value="Gordon Ramsay, screaming about how raw and disgusting the code is">Gordon Ramsay 🍳</option>
-        </select>
+          placeholder="Type a persona..."
+          className="bg-[#161616] text-sm text-purple-400 border border-gray-700 rounded-md px-2 py-1 outline-none w-64 truncate focus:border-purple-500 transition"
+        />
+        <datalist id="persona-suggestions">
+          <option value="an elite, dark-sarcastic, slightly toxic Senior Developer" />
+          <option value="a kind, patient, and overly encouraging kindergarten teacher" />
+          <option value="Yoda from Star Wars" />
+          <option value="Batman, speaking in a dark, brooding, and serious tone" />
+          <option value="a hyperactive, caffeinated startup bro who uses too much crypto slang" />
+          <option value="Gordon Ramsay, screaming about how raw and disgusting the code is" />
+        </datalist>
       </div>
 
       {/* --- QUICK ACTION CARDS --- */}
@@ -113,7 +115,6 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
 
         <button
           onClick={() => handleAction('debug')}
-          // Disable if there is no error/execution result to debug
           disabled={!executionResult}
           className="flex flex-col items-center justify-center p-3 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg border border-gray-700 transition text-gray-300 hover:text-red-400 group"
         >
@@ -151,7 +152,6 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
                 ? 'bg-blue-600 text-white rounded-tr-none'
                 : 'bg-[#2d2d2d] text-gray-200 border border-gray-700 rounded-tl-none font-mono leading-relaxed'
               }`}>
-              {/* If user message has the auto-context appended, hide the context part from the UI */}
               {msg.role === 'user' ? msg.text.split('--- SYSTEM CONTEXT ---')[0].trim() : msg.text}
             </div>
           </div>

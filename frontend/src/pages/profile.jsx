@@ -50,6 +50,7 @@ const ProfilePage = () => {
     try {
       const res = await profileService.fetchHistory(); // Should return array of submissions
       const subs = Array.isArray(res) ? res : [];
+      console.log("Fetched history:", subs);
       setSubmissions(subs);
       calculateStats(subs);
       generateHeatmap(subs);
@@ -305,7 +306,7 @@ const ProfilePage = () => {
                     <tr key={sub._id} className="hover:bg-[#1f1f1f] transition-colors">
                       <td className="p-4 font-medium text-white">
                         <Link to={`/problem/${sub.content?.slug}`} className="hover:text-blue-400 transition">
-                          {sub.content?.title || "Unknown Problem"}
+                          {sub.problemSnapshot?.title || "Unknown Problem"}
                         </Link>
                       </td>
                       <td className="p-4">

@@ -22,6 +22,8 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx'; // The new dashbo
 import ProtectedRoute from './component/ProtectedRoute';
 import AdminLayout from './layouts/AdminLayout'; // The sidebar layout
 
+import Dashboard from './pages/DashBoard.jsx';
+
 function App() {
   return (
     <>
@@ -36,8 +38,8 @@ function App() {
 
       <Routes>
         {/* --- PUBLIC ROUTES --- */}
-        <Route path="/" element={<Login />} />
-        <Route path="/home" element={<HomePage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<HomePage />} />
 
         {/* --- PROTECTED USER ROUTES --- */}
         {/* Users must be logged in to see these */}
@@ -78,6 +80,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Leaderboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
             </ProtectedRoute>
           } 
         />

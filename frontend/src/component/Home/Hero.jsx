@@ -7,7 +7,7 @@ import {
   motion, useScroll, useTransform, useSpring, 
   useMotionValue, useMotionTemplate, animate 
 } from "framer-motion";
-
+import { useNavigate } from "react-router-dom";
 // --- GLOBAL & UTILITY STYLES ---
 const GlobalStyles = () => (
   <style>{`
@@ -168,32 +168,37 @@ const CodeBlock = () => {
 
 // --- MAIN SECTIONS ---
 
-const Navbar = () => (
-  <motion.nav 
-    initial={{ y: -100 }} animate={{ y: 0 }} transition={{ duration: 0.8 }}
-    className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-6 px-4"
-  >
-    <div className="glass-nav rounded-full px-6 py-3 flex items-center gap-12">
-      <div className="flex items-center gap-2 font-bold text-xl tracking-tighter">
-        <div className="relative">
-          <div className="absolute inset-0 bg-blue-500 blur-lg opacity-40" />
-          <Code2 className="w-6 h-6 text-white relative z-10" />
+const Navbar = () => {
+  const navigate = useNavigate();
+  return (
+    <motion.nav 
+      initial={{ y: -100 }} animate={{ y: 0 }} transition={{ duration: 0.8 }}
+      className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-6 px-4"
+    >
+      <div className="glass-nav rounded-full px-6 py-3 flex items-center gap-12">
+        <div className="flex items-center gap-2 font-bold text-xl tracking-tighter">
+          <div className="relative">
+            <div className="absolute inset-0 bg-blue-500 blur-lg opacity-40" />
+            <Code2 className="w-6 h-6 text-white relative z-10" />
+          </div>
+          <span className="text-white">CodEzy</span>
         </div>
-        <span className="text-white">CodEzy</span>
-      </div>
 
-      <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
-        {["Arena", "Learning", "Enterprise"].map(item => (
-          <a key={item} href="#" className="hover:text-white hover:scale-105 transition-all">{item}</a>
-        ))}
-      </div>
+        <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
+          {["Arena", "Learning", "Enterprise"].map(item => (
+            <a key={item} href="#" className="hover:text-white hover:scale-105 transition-all">{item}</a>
+          ))}
+        </div>
 
-      <button className="bg-white/10 hover:bg-white/20 text-white px-5 py-2 rounded-full text-sm font-semibold border border-white/10 transition-all backdrop-blur-md">
-        Get Started
-      </button>
-    </div>
-  </motion.nav>
-);
+        <button
+          onClick={() => navigate("/login")}
+          className="bg-white/10 hover:bg-white/20 text-white px-5 py-2 rounded-full text-sm font-semibold border border-white/10 transition-all backdrop-blur-md">
+          Get Started
+        </button>
+      </div>
+    </motion.nav>
+  );
+};
 
 const TiltContainer = ({ children }) => {
   const x = useMotionValue(0);
