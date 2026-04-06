@@ -8,7 +8,8 @@ import {
 } from '../controllers/admin/problem.controller.js';
 import {
   getAllProblems,
-  getProblemBySlug
+  getProblemBySlug,
+  getRandomProblem
 } from '../controllers/learner/problem.controller.js';
 import {
   deleteProblem,
@@ -54,7 +55,12 @@ router.get(
   // isLearner,
   getAllProblems
 );
-
+router.get(
+  '/random',
+  authMiddleware,
+  // isLearner,
+  getRandomProblem
+);
 router.get(
   '/:slug',
   authMiddleware,

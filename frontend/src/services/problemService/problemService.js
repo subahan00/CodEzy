@@ -89,8 +89,23 @@ publishProblem: async(id)=>{
         throw error;
        }
 
+},
+ getRandomProblem: async () => {
+    try {
+        const token = localStorage.getItem("token");
+        const config = {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        };
+        const response = await axios.get(`${BASE_URL}/random`, config);
+        return response;
+    } catch (error) {
+        throw error;
+    }
 }
 };
 
+   
 export default problemService;
 

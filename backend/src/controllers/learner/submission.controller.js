@@ -119,37 +119,43 @@ export const getSubmissionById = async (req, res) => {
 export const runCode = async (req, res) => {
   try {
     const { language, code, problemId } = req.body;
-    // Fetch the Problem
-    const problem = await Content.findById(problemId);
-    if (!problem) return res.status(404).json({ message: "Problem not found" });
 
-    // Fetch Sample Test Case
-    const sampleTestCase = await TestCase.findOne({ problem: problemId });
-    console.log('sampleTestCase',sampleTestCase);
-    if (!sampleTestCase) {
-        return res.status(400).json({ message: "No test cases found for this problem" });
+    if (!language || !code || !problemId) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // Add Job to Queue
+    const problem = await Content.findById(problemId);
+    if (!problem) return res.status(404).json({ message: 'Problem not found' });
+
+    // ✅ Fix #2: Fetch ALL test cases, not just one sample
+    const testCases = await TestCase.find({ problem: problemId });
+    if (!testCases.length) {
+      return res.status(400).json({ message: 'No test cases found for this problem' });
+    }
+
     const job = await submissionQueue.add('run', {
       language,
       code,
-      testCases: [sampleTestCase], // ✅ Send as Array for the Worker
+      testCases, // ✅ Full array
       isDryRun: true
     });
 
-    // 3. WAIT for the Worker to finish (Timeout: 10s)
-    // This allows us to return the actual output to the frontend
-    const result = await job.waitUntilFinished(queueEvents, 10000); 
+    const result = await job.waitUntilFinished(queueEvents, 30000); // Increased timeout for multiple tests
 
-    res.json({ 
-      success: true, 
-      data: result // ✅ Contains the actual test results
+    // ✅ Fix #3: Return with explicit passedTests/totalTests keys
+    // so DuelRoom.jsx can read them clearly
+    res.json({
+      success: true,
+      data: {
+        ...result,
+        passedTests: result.executionStats.passed,
+        totalTests: result.executionStats.total,
+      }
     });
 
   } catch (error) {
-    console.error("Run Code Error:", error);
-    res.status(500).json({ success: false, message: error.message || "Execution failed" });
+    console.error('Run Code Error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Execution failed' });
   }
 };
 

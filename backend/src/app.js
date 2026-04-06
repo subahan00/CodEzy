@@ -10,7 +10,7 @@ import problemROUTES from "./routes/problem.routes.js";
 import submissionRoutes from "./routes/submission.routes.js";
 import userRoutes from "./routes/UserRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
-
+import { setupSocketHandlers } from "./sockets/socketManager.js";
 dotenv.config();
 
 const app = express();
@@ -41,17 +41,7 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Socket logic
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  socket.on("send_message", (data) => {
-    io.emit("receive_message", data);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
-});
+setupSocketHandlers(io);
 
 // ✅ EXPORT BOTH
 export { app, server };

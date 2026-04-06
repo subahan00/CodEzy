@@ -12,7 +12,8 @@ import Aimentor from './pages/AiMentor';
 import ProblemList from './pages/problemList.jsx';
 import ProblemPage from './pages/problemPage.jsx';
 import Leaderboard from './pages/Leaderboard/LeaderboardPage.jsx';
-
+import Arena from './pages/Arena.jsx';
+import DuelRoom from './pages/DuelRoom.jsx';
 // --- ADMIN PAGES ---
 import ManageProblems from './pages/admin/Manageproblems.jsx';
 import CreateProblems from './pages/admin/createProblems.jsx';
@@ -58,6 +59,22 @@ function App() {
               <Aimentor />
             </ProtectedRoute>
           } 
+        />
+        <Route 
+          path="/arena/:roomId" 
+          element={
+            <ProtectedRoute>
+              <DuelRoom />
+            </ProtectedRoute>
+          }
+        />
+        <Route 
+          path="/arena" 
+          element={
+            <ProtectedRoute>
+              <Arena />
+            </ProtectedRoute>
+          }
         />
         <Route 
           path="/problems" 
