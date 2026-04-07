@@ -1,11 +1,100 @@
-import { fetchRandomProblem } from '../controllers/learner/problem.controller.js'; // ✅ Import reusable fn
+import { fetchRandomProblem } from '../controllers/learner/problem.controller.js';
+import { updateEloAfterDuel } from '../services/eloService/eloService.js';
+import {
+  saveDuel, getDuel, deleteDuel, updateDuel,
+  getAllActiveDuels, addToQueue, popFromQueue,
+  getQueueLength, removeFromQueue, isUserInQueue
+} from '../services/eloService/duelStateService.js';
 
-let waitingQueue = [];
-let activeDuels = {};
+const DUEL_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
+// In-memory timer map — timers can't be stored in Redis
+// On restart these are rebuilt from Redis duel data
+const duelTimers = {};
+
+// ==========================================
+// --- TIMER LOGIC ---
+// ==========================================
+const startDuelTimer = (io, roomId, duelData) => {
+  // Clear any existing timer for this room
+  if (duelTimers[roomId]) clearTimeout(duelTimers[roomId]);
+
+  const elapsed = Date.now() - duelData.startTime;
+  const remaining = DUEL_DURATION_MS - elapsed;
+
+  // Duel already expired (e.g. server restarted after 30 mins)
+  if (remaining <= 0) {
+    handleTimerExpiry(io, roomId);
+    return;
+  }
+
+  duelTimers[roomId] = setTimeout(() => {
+    handleTimerExpiry(io, roomId);
+  }, remaining);
+};
+
+const handleTimerExpiry = async (io, roomId) => {
+  const duel = await getDuel(roomId);
+  if (!duel) return;
+  if (duel.winner) return; // Already resolved
+
+  const p1Progress = duel.player1.progress || 0;
+  const p2Progress = duel.player2.progress || 0;
+
+  let winner = null;
+  let loser = null;
+  let reason = 'time_up';
+
+  if (p1Progress > p2Progress) {
+    winner = duel.player1.username;
+    loser = duel.player2.username;
+  } else if (p2Progress > p1Progress) {
+    winner = duel.player2.username;
+    loser = duel.player1.username;
+  }
+  // Equal progress = draw, winner stays null
+
+  console.log(`⏰ Timer expired in ${roomId}. Winner: ${winner || 'Draw'}`);
+
+  io.to(roomId).emit('game_over', {
+    winner,
+    reason,
+    isDraw: winner === null
+  });
+
+  // Update Elo only if there's a clear winner
+  if (winner && loser) {
+    await updateEloAfterDuel(winner, loser);
+  }
+
+  await deleteDuel(roomId);
+  delete duelTimers[roomId];
+};
+
+// ==========================================
+// --- RESTART RECOVERY ---
+// ==========================================
+export const recoverActiveDuels = async (io) => {
+  const activeDuels = await getAllActiveDuels();
+  const count = Object.keys(activeDuels).length;
+  if (!count) return;
+
+  console.log(`🔄 Recovering ${count} active duels from Redis...`);
+  for (const roomId in activeDuels) {
+    startDuelTimer(io, roomId, activeDuels[roomId]);
+  }
+};
+
+// ==========================================
+// --- MAIN SOCKET HANDLER ---
+// ==========================================
 export const setupSocketHandlers = (io) => {
+
+  // Recover duels on startup
+  recoverActiveDuels(io);
+
   io.on('connection', (socket) => {
-    console.log('⚡ A user connected via Socket:', socket.id);
+    console.log('⚡ Connected:', socket.id);
 
     socket.on('send_message', (data) => {
       io.emit('receive_message', data);
@@ -17,141 +106,190 @@ export const setupSocketHandlers = (io) => {
     socket.on('join_queue', async (userData) => {
       console.log(`🎮 ${userData.username} joined the queue.`);
 
-      // ✅ Fix #10 (bonus): Prevent same user from queuing twice
-      const alreadyInQueue = waitingQueue.some(u => u.username === userData.username);
-      if (alreadyInQueue) {
+      // #10 — Prevent queuing if already in queue
+      const alreadyQueued = await isUserInQueue(userData.username);
+      if (alreadyQueued) {
         socket.emit('waiting_for_match');
         return;
       }
 
-      if (waitingQueue.length > 0) {
-        const opponent = waitingQueue.pop();
+      // #10 — Prevent queuing if already in active duel
+      const activeDuels = await getAllActiveDuels();
+      const alreadyInDuel = Object.values(activeDuels).some(
+        d => d.player1.username === userData.username ||
+          d.player2.username === userData.username
+      );
+      if (alreadyInDuel) {
+        socket.emit('already_in_duel');
+        return;
+      }
+
+      const queueLength = await getQueueLength();
+
+      if (queueLength > 0) {
+        const opponent = await popFromQueue();
+        if (!opponent) {
+          // Race condition safety — queue was emptied between check and pop
+          await addToQueue({ ...userData, socketId: socket.id });
+          socket.emit('waiting_for_match');
+          return;
+        }
+
         const roomId = `duel_${opponent.socketId}_${socket.id}`;
 
         socket.join(roomId);
         const opponentSocket = io.sockets.sockets.get(opponent.socketId);
         if (opponentSocket) opponentSocket.join(roomId);
 
-        // ✅ Fix #1: Fetch problem ONCE on the server, send to both players
         let problem;
         try {
           problem = await fetchRandomProblem();
         } catch (err) {
-          console.error('Failed to fetch problem for duel:', err);
+          console.error('Failed to fetch problem:', err);
           socket.emit('duel_error', { message: 'Failed to load problem. Please try again.' });
           opponentSocket?.emit('duel_error', { message: 'Failed to load problem. Please try again.' });
-          waitingQueue.push(opponent); // put opponent back in queue
+          await addToQueue(opponent); // Put opponent back
           return;
         }
 
-        activeDuels[roomId] = {
-          player1: opponent,
-          player2: { ...userData, socketId: socket.id },
+        const duelData = {
+          player1: { ...opponent, progress: 0 },
+          player2: { ...userData, socketId: socket.id, progress: 0 },
           roomId,
-          problem,          // ✅ Store problem in duel state
-          winner: null,     // ✅ Fix #4: Track winner server-side
+          problem,
+          winner: null,
           startTime: Date.now()
         };
 
-        // Both players receive the same problem in duel_started
-        io.to(roomId).emit('duel_started', activeDuels[roomId]);
-        console.log(`⚔️ Duel started in room: ${roomId}`);
+        // #11 — Persist to Redis
+        await saveDuel(roomId, duelData);
+
+        // #8 — Start server-side timer
+        startDuelTimer(io, roomId, duelData);
+
+        io.to(roomId).emit('duel_started', {
+          ...duelData,
+          durationMs: DUEL_DURATION_MS
+        });
+
+        console.log(`⚔️ Duel started: ${roomId}`);
 
       } else {
-        waitingQueue.push({ ...userData, socketId: socket.id });
+        await addToQueue({ ...userData, socketId: socket.id });
         socket.emit('waiting_for_match');
       }
     });
 
+    // ==========================================
+    // --- PROGRESS UPDATE ---
+    // ==========================================
+    socket.on('update_progress', async ({ roomId, progress, username }) => {
+      const duel = await getDuel(roomId);
+      if (!duel || duel.winner) return;
 
-    socket.on('update_progress', ({ roomId, progress, username }) => {
-      const duel = activeDuels[roomId];
-      if (!duel || duel.winner) return; // Stop if game is already over
+      const isPlayer1 = duel.player1.username === username;
+      await updateDuel(roomId, {
+        player1: isPlayer1 ? { ...duel.player1, progress } : duel.player1,
+        player2: !isPlayer1 ? { ...duel.player2, progress } : duel.player2
+      });
 
-      // Broadcast progress to opponent
       socket.to(roomId).emit('opponent_progress', { username, progress });
 
-      // ✅ SERVER evaluates win condition securely
+      // ✅ Server evaluates win — client never announces its own victory
       if (progress === 100) {
-        duel.winner = username; 
-        console.log(`🏆 Duel in ${roomId} won by ${username}!`);
-        
-        io.to(roomId).emit('game_over', { winner: username });
-        delete activeDuels[roomId];
+        const loserName = isPlayer1 ? duel.player2.username : duel.player1.username;
+        const eloDelta = await updateEloAfterDuel(username, loserName);
+
+        await updateDuel(roomId, { winner: username });
+        console.log(`🏆 ${username} won in ${roomId}`);
+
+        io.to(roomId).emit('game_over', { winner: username, eloChange: eloDelta });
+
+        await deleteDuel(roomId);
+        if (duelTimers[roomId]) {
+          clearTimeout(duelTimers[roomId]);
+          delete duelTimers[roomId];
+        }
       }
     });
 
-    // ✅ Fix #4: Server-side win guard — only first winner counts
-    socket.on('duel_won', ({ roomId, winnerName }) => {
-      const duel = activeDuels[roomId];
-      if (!duel) return; // Room already cleaned up
 
-      if (duel.winner) {
-        // A winner was already recorded — ignore this duplicate event
-        console.log(`⚠️ Duplicate duel_won ignored in ${roomId}`);
+    // ==========================================
+    // --- REJOIN ---
+    // ==========================================
+    socket.on('rejoin_room', async ({ roomId, username }) => {
+      const duel = await getDuel(roomId);
+      if (!duel) {
+        console.log(`[Rejoin] Room ${roomId} not found`);
         return;
       }
 
-      duel.winner = winnerName; // Lock the winner
-      console.log(`🏆 Duel in ${roomId} won by ${winnerName}!`);
-
-      io.to(roomId).emit('game_over', { winner: winnerName });
-      delete activeDuels[roomId];
-    });
-
-  // ✅ Fix #5: Secure rejoin using username! (This fixes the infinite loading)
-    socket.on('rejoin_room', (data) => {
-      // Extract data safely
-      const roomId = data.roomId;
-      const username = data.username;
-
-      const duel = activeDuels[roomId];
-      if (!duel) {
-        console.log(`[DEBUG] Rejoin failed: Room ${roomId} not found.`);
-        return; 
-      }
-
-      // Check if the username matches player 1 or player 2
       const isPlayer1 = duel.player1.username === username;
       const isPlayer2 = duel.player2.username === username;
 
       if (isPlayer1 || isPlayer2) {
-        // IMPORTANT: Update the socket ID to their new one!
-        if (isPlayer1) duel.player1.socketId = socket.id;
-        if (isPlayer2) duel.player2.socketId = socket.id;
+        // Update socket ID to their new one
+        const updatedDuel = await updateDuel(roomId, {
+          player1: isPlayer1
+            ? { ...duel.player1, socketId: socket.id }
+            : duel.player1,
+          player2: isPlayer2
+            ? { ...duel.player2, socketId: socket.id }
+            : duel.player2
+        });
 
         socket.join(roomId);
-        // Re-send problem so the rejoining player's UI recovers instantly
-        socket.emit('duel_started', duel);
-        console.log(`🔄 ${username} successfully rejoined ${roomId}`);
+        socket.emit('duel_started', {
+          ...updatedDuel,
+          durationMs: DUEL_DURATION_MS
+        });
+
+        console.log(`🔄 ${username} rejoined ${roomId}`);
       }
     });
+
     // ==========================================
     // --- DISCONNECT ---
     // ==========================================
-    socket.on('disconnect', () => {
-      console.log('❌ User disconnected:', socket.id);
+    socket.on('disconnect', async () => {
+      console.log('❌ Disconnected:', socket.id);
 
-      waitingQueue = waitingQueue.filter(u => u.socketId !== socket.id);
+      await removeFromQueue(socket.id);
 
+      const activeDuels = await getAllActiveDuels();
       for (const roomId in activeDuels) {
         const duel = activeDuels[roomId];
 
-        if (duel.player1.socketId === socket.id || duel.player2.socketId === socket.id) {
-          if (duel.winner) break; // Game already over, skip
+        if (
+          duel.player1.socketId === socket.id ||
+          duel.player2.socketId === socket.id
+        ) {
+          if (duel.winner) break;
 
           const winnerName = duel.player1.socketId === socket.id
             ? duel.player2.username
             : duel.player1.username;
 
+          const loserName = duel.player1.socketId === socket.id
+            ? duel.player1.username
+            : duel.player2.username;
+
           console.log(`🏃 Rage quit in ${roomId}. ${winnerName} wins!`);
+
+          // #9 — Elo update on disconnect win too
+          const eloDelta = await updateEloAfterDuel(winnerName, loserName);
 
           io.to(roomId).emit('game_over', {
             winner: winnerName,
-            reason: 'opponent_disconnected'
+            reason: 'opponent_disconnected',
+            eloChange: eloDelta
           });
 
-          delete activeDuels[roomId];
+          await deleteDuel(roomId);
+          if (duelTimers[roomId]) {
+            clearTimeout(duelTimers[roomId]);
+            delete duelTimers[roomId];
+          }
           break;
         }
       }
