@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import Navbar from '../component/HomePage/Navbar';
+import Navbar from '../component/Dashboard/Navbar';
 import { FiCrosshair, FiLoader } from 'react-icons/fi';
 
 // Connect to backend
