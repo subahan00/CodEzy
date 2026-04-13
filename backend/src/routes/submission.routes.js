@@ -5,7 +5,8 @@ import {
   createSubmission,
   getMySubmissions,
   getSubmissionById,
-  runCode
+  runCode,
+  getSubmissionByProblemId
 } from '../controllers/learner/submission.controller.js';
 
 const router = express.Router();
@@ -35,6 +36,12 @@ router.post(
   authMiddleware,
    isLearner,
   runCode
+);
+router.get(
+  '/submissions-by-problem/:id',
+  authMiddleware,
+  isLearner,
+  getSubmissionByProblemId
 );
 
 export default router;

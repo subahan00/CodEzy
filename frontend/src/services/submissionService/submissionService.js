@@ -1,5 +1,4 @@
 import axios from 'axios';
-
 const BASE_URL = 'http://localhost:9999/api/submissions';
 const submissionService = {
   createSubmission: async (contentId, language, sourceCode) => {
@@ -47,6 +46,20 @@ const submissionService = {
         code: sourceCode,
         problemId
       }, config);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+  getSubmissionByProblemId: async (problemId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      };
+      const response = await axios.get(`${BASE_URL}/submissions-by-problem/${problemId}`, config);
       return response;
     } catch (error) {
       throw error;

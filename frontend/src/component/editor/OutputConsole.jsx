@@ -1,93 +1,95 @@
 import React, { useState } from 'react';
-import { FiTerminal, FiCpu, FiAlertTriangle, FiCheckCircle, FiXCircle, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import {
+  FiTerminal, FiCpu, FiAlertTriangle, FiCheckCircle, FiXCircle,
+  FiChevronDown, FiChevronRight, FiClock, FiZap
+} from 'react-icons/fi';
 
-// Ambient Grid updated to a subtle Cyan to match the hardware terminal theme
-const AmbientGrid = () => (
-  <div 
-    className="absolute inset-0 pointer-events-none opacity-[0.04] z-0"
-    style={{
-      backgroundImage: `
-        linear-gradient(rgba(6, 182, 212, 0.8) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(6, 182, 212, 0.8) 1px, transparent 1px)
-      `,
-      backgroundSize: '24px 24px',
-      backgroundPosition: 'center center'
-    }}
-  />
-);
-
+// ── Individual test case ─────────────────────────────────────────────────
 const TestCaseItem = ({ test, index }) => {
   const isPass = test.status === 'ACCEPTED' || test.passed === true;
-  const [isOpen, setIsOpen] = useState(!isPass); 
+  const [open, setOpen] = useState(!isPass);
 
   return (
-    <div 
-      className="relative z-10 rounded-lg border overflow-hidden transition-all duration-200"
+    <div
+      className="rounded-lg overflow-hidden transition-all duration-150"
       style={{
-        background: isPass ? 'rgba(16, 185, 129, 0.03)' : 'rgba(225, 29, 72, 0.05)',
-        borderColor: isPass ? 'rgba(16, 185, 129, 0.2)' : 'rgba(225, 29, 72, 0.3)',
+        background: isPass ? 'rgba(16,185,129,0.03)' : 'rgba(239,68,68,0.04)',
+        border: `1px solid ${isPass ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.2)'}`,
       }}
     >
-      {/* Header Toggle */}
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-white/5 transition-colors"
+      {/* Header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors"
       >
-        <div className="flex items-center gap-3">
-          {isPass ? <FiCheckCircle className="text-emerald-500" size={14} /> : <FiXCircle className="text-rose-500" size={14} />}
-          <span className="font-bold text-gray-300 text-xs" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-            TEST CASE {index + 1}
+        <div className="flex items-center gap-2.5">
+          {isPass
+            ? <FiCheckCircle size={13} style={{ color: '#34d399' }} />
+            : <FiXCircle    size={13} style={{ color: '#f87171' }} />
+          }
+          <span
+            className="text-xs font-bold uppercase tracking-wider"
+            style={{ color: '#94a3b8', fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            Case {index + 1}
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <span 
-            className="text-[10px] font-bold tracking-widest uppercase"
-            style={{ color: isPass ? '#34d399' : '#fb7185' }}
+          {test.time && (
+            <span
+              className="flex items-center gap-1 text-[10px]"
+              style={{ color: 'rgba(99,102,241,0.5)', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              <FiClock size={9} />
+              {test.time}ms
+            </span>
+          )}
+          <span
+            className="text-[10px] font-bold uppercase tracking-widest"
+            style={{ color: isPass ? '#34d399' : '#f87171', fontFamily: "'JetBrains Mono', monospace" }}
           >
-            {isPass ? 'Passed' : 'Failed'}
+            {isPass ? 'Pass' : 'Fail'}
           </span>
-          {isOpen ? <FiChevronDown className="text-gray-500" size={14} /> : <FiChevronRight className="text-gray-500" size={14} />}
+          {open
+            ? <FiChevronDown  size={12} style={{ color: 'rgba(148,163,184,0.4)' }} />
+            : <FiChevronRight size={12} style={{ color: 'rgba(148,163,184,0.4)' }} />
+          }
         </div>
       </button>
 
-      {/* Collapsible Content */}
-      {isOpen && (
-        <div className="px-4 pb-4 pt-1 space-y-3 border-t border-white/5">
-          {/* Input */}
-          <div>
-            <div className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider font-semibold">Input Data</div>
-            <div className="bg-black p-2.5 rounded border border-cyan-900/30 text-cyan-200 font-mono text-xs whitespace-pre-wrap shadow-[inset_0_0_10px_rgba(6,182,212,0.05)]">
-              {test.input}
-            </div>
-          </div>
-
-          {/* Expected vs Actual */}
+      {/* Body */}
+      {open && (
+        <div
+          className="px-4 pb-4 space-y-3"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+        >
+          <DataBlock label="Input" value={test.input} color="rgba(165,180,252,0.85)" borderColor="rgba(99,102,241,0.2)" />
           <div className="grid grid-cols-2 gap-3">
-             <div>
-                <div className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider font-semibold">Your Output</div>
-                <div 
-                  className="bg-black p-2.5 rounded border text-xs whitespace-pre-wrap font-mono h-full"
-                  style={{ 
-                    borderColor: isPass ? 'rgba(16, 185, 129, 0.2)' : 'rgba(225, 29, 72, 0.3)',
-                    color: isPass ? '#d4d4d8' : '#fda4af' 
-                  }}
-                >
-                   {test.output}
-                </div>
-             </div>
-             <div>
-                <div className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider font-semibold">Expected Output</div>
-                <div className="bg-black border border-white/10 p-2.5 rounded text-emerald-300 font-mono text-xs whitespace-pre-wrap h-full">
-                   {test.expectedOutput}
-                </div>
-             </div>
+            <DataBlock
+              label="Your output"
+              value={test.output}
+              color={isPass ? 'rgba(163,230,180,0.85)' : 'rgba(252,165,165,0.85)'}
+              borderColor={isPass ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.25)'}
+            />
+            <DataBlock
+              label="Expected"
+              value={test.expectedOutput}
+              color="rgba(110,231,183,0.85)"
+              borderColor="rgba(16,185,129,0.15)"
+            />
           </div>
-
-          {/* Runtime Error Injection */}
           {test.error && (
-            <div className="mt-3 text-rose-300 text-xs bg-rose-900/20 p-3 rounded border border-rose-900/50 flex items-start gap-2">
-              <FiAlertTriangle className="flex-shrink-0 mt-0.5 text-rose-400" size={14} />
-              <span className="font-mono">{test.error}</span>
+            <div
+              className="flex items-start gap-2 p-3 rounded text-xs"
+              style={{
+                background: 'rgba(239,68,68,0.07)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                color: '#fca5a5',
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              <FiAlertTriangle size={13} className="shrink-0 mt-0.5" style={{ color: '#f87171' }} />
+              <span className="whitespace-pre-wrap">{test.error}</span>
             </div>
           )}
         </div>
@@ -96,47 +98,95 @@ const TestCaseItem = ({ test, index }) => {
   );
 };
 
+const DataBlock = ({ label, value, color, borderColor }) => (
+  <div>
+    <div
+      className="text-[9px] uppercase tracking-widest font-bold mb-1.5"
+      style={{ color: 'rgba(148,163,184,0.5)', fontFamily: "'JetBrains Mono', monospace" }}
+    >
+      {label}
+    </div>
+    <div
+      className="rounded p-2.5 text-xs whitespace-pre-wrap"
+      style={{
+        background: '#030409',
+        border: `1px solid ${borderColor}`,
+        color,
+        fontFamily: "'JetBrains Mono', monospace",
+        lineHeight: 1.6,
+        minHeight: 36,
+      }}
+    >
+      {value ?? <span style={{ opacity: 0.3 }}>—</span>}
+    </div>
+  </div>
+);
+
+// ── Main component ────────────────────────────────────────────────────────
 const OutputConsole = ({ status, result, error }) => {
-  
-  // 1. Idle State
-  if (status === 'idle' || (!result && !error && status !== 'running')) {
+  const isIdle    = status === 'idle' || (!result && !error && status !== 'running' && status !== 'pending');
+  const isLoading = status === 'running' || status === 'pending';
+  const isError   = status === 'error' || !!error;
+
+  if (isIdle) {
     return (
-      <div className="h-full relative overflow-hidden flex items-center justify-center bg-[#09090b]">
-        <AmbientGrid />
-        <div className="flex items-center gap-2 text-cyan-500/50 font-mono text-xs z-10">
-          <FiTerminal size={14} />
-          <span>Awaiting execution command... <span className="animate-pulse text-cyan-400">_</span></span>
+      <div
+        className="h-full flex items-center justify-center"
+        style={{ background: '#06080f' }}
+      >
+        <div
+          className="flex items-center gap-2 text-xs"
+          style={{ color: 'rgba(99,102,241,0.3)', fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          <FiTerminal size={13} />
+          <span>Run your code to see output</span>
+          <span className="animate-pulse" style={{ color: 'rgba(99,102,241,0.5)' }}>_</span>
         </div>
       </div>
     );
   }
 
-  // 2. Loading State
-  if (status === 'running' || status === 'pending') {
+  if (isLoading) {
     return (
-      <div className="h-full relative overflow-hidden flex flex-col items-center justify-center bg-[#09090b]">
-        <AmbientGrid />
-        <div className="z-10 flex flex-col items-center gap-3">
-          <FiCpu className="text-cyan-400 animate-pulse" size={24} />
-          <span className="text-cyan-300 font-mono text-xs tracking-widest uppercase animate-pulse">
-            Compiling Build...
-          </span>
-        </div>
+      <div
+        className="h-full flex flex-col items-center justify-center gap-3"
+        style={{ background: '#06080f' }}
+      >
+        <FiCpu
+          size={20}
+          className="animate-pulse"
+          style={{ color: 'rgba(99,102,241,0.5)' }}
+        />
+        <span
+          className="text-[10px] uppercase tracking-[0.25em] animate-pulse"
+          style={{ color: 'rgba(99,102,241,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          Evaluating...
+        </span>
       </div>
     );
   }
 
-  // 3. System Error State
-  if (status === 'error' || error) {
+  if (isError) {
     return (
-      <div className="h-full relative overflow-auto bg-[#09090b] p-4">
-        <AmbientGrid />
-        <div className="relative z-10 border border-rose-900/50 bg-rose-900/10 p-4 rounded-xl flex items-start gap-3">
-          <FiAlertTriangle className="text-rose-500 mt-0.5" size={18} />
+      <div className="h-full overflow-auto p-4" style={{ background: '#06080f' }}>
+        <div
+          className="flex items-start gap-3 p-4 rounded-lg"
+          style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}
+        >
+          <FiAlertTriangle size={16} style={{ color: '#f87171', flexShrink: 0, marginTop: 2 }} />
           <div>
-            <h4 className="text-rose-500 font-bold text-xs uppercase tracking-wider mb-1 font-mono">System Exception</h4>
-            <div className="text-rose-300/80 font-mono text-xs whitespace-pre-wrap">
-              {error?.message || error || "Unknown Error"}
+            <div
+              className="text-[10px] uppercase tracking-widest font-bold mb-2"
+              style={{ color: '#f87171', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              Runtime Error
+            </div>
+            <div
+              className="text-xs whitespace-pre-wrap"
+              style={{ color: 'rgba(252,165,165,0.8)', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.7 }}
+            >
+              {error?.message || error || 'Unknown error'}
             </div>
           </div>
         </div>
@@ -144,57 +194,105 @@ const OutputConsole = ({ status, result, error }) => {
     );
   }
 
-  // 4. Result State (Verdict)
   if (!result) return null;
 
-  const verdict = result.status || 'unknown';
-  const isAccepted = verdict.toLowerCase() === 'accepted';
-  const stats = result.executionStats || { passed: 0, total: 0 };
+  const verdict    = result.status || 'unknown';
+  const accepted   = verdict.toLowerCase() === 'accepted';
+  const stats      = result.executionStats || { passed: 0, total: 0 };
+  const passRatio  = stats.total > 0 ? (stats.passed / stats.total) : 0;
 
   return (
-    <div className="h-full relative overflow-y-auto bg-[#09090b] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-      <AmbientGrid />
-      
-      <div className="relative z-10 p-4 space-y-4">
-        {/* Telemetry Header */}
-        <div 
-          className="p-4 rounded-xl border flex justify-between items-center bg-black/40 shadow-sm"
+    <div
+      className="h-full overflow-y-auto"
+      style={{ background: '#06080f', scrollbarWidth: 'thin', scrollbarColor: 'rgba(99,102,241,0.15) transparent' }}
+    >
+      <div className="p-4 space-y-4">
+
+        {/* ── Verdict Banner ─── */}
+        <div
+          className="p-4 rounded-lg flex items-center justify-between"
           style={{
-            borderColor: isAccepted ? 'rgba(16, 185, 129, 0.2)' : 'rgba(225, 29, 72, 0.2)',
+            background: accepted ? 'rgba(16,185,129,0.04)' : 'rgba(239,68,68,0.05)',
+            border: `1px solid ${accepted ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.2)'}`,
           }}
         >
           <div>
-            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">
-              Final Verdict
+            <div
+              className="text-[9px] uppercase tracking-widest font-bold mb-1"
+              style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              Verdict
             </div>
-            <div 
-              className="font-bold text-lg uppercase tracking-wider"
-              style={{ 
+            <div
+              className="text-base font-bold uppercase tracking-wider"
+              style={{
+                color: accepted ? '#34d399' : '#f87171',
                 fontFamily: "'JetBrains Mono', monospace",
-                color: isAccepted ? '#34d399' : '#fb7185',
-                textShadow: isAccepted ? '0 0 10px rgba(52, 211, 153, 0.3)' : '0 0 10px rgba(251, 113, 133, 0.3)'
               }}
             >
-               {verdict.replace(/-/g, ' ')}
+              {verdict.replace(/-/g, ' ')}
             </div>
           </div>
 
+          {/* Test case progress */}
           <div className="text-right">
-            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">
-              Test Cases
+            <div
+              className="text-[9px] uppercase tracking-widest font-bold mb-1.5"
+              style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              Tests
             </div>
-            <div className="font-mono text-sm">
-              <span style={{ color: isAccepted ? '#34d399' : '#fb7185' }}>{stats.passed}</span>
-              <span className="text-zinc-600"> / {stats.total}</span>
+            <div className="flex items-center gap-2">
+              <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${passRatio * 100}%`,
+                    background: accepted ? '#34d399' : '#f87171',
+                  }}
+                />
+              </div>
+              <span
+                className="text-xs font-bold"
+                style={{ color: accepted ? '#34d399' : '#f87171', fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                {stats.passed}
+                <span style={{ color: 'rgba(148,163,184,0.3)' }}>/{stats.total}</span>
+              </span>
             </div>
           </div>
+
+          {/* Runtime stats */}
+          {result.runtime && (
+            <div className="text-right">
+              <div
+                className="text-[9px] uppercase tracking-widest font-bold mb-1"
+                style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                Runtime
+              </div>
+              <div
+                className="flex items-center gap-1 text-xs font-bold"
+                style={{ color: '#fbbf24', fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                <FiZap size={11} />
+                {result.runtime}ms
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Test Cases List */}
-        {Array.isArray(result.testResults) && (
-          <div className="space-y-3">
-            {result.testResults.map((test, index) => (
-              <TestCaseItem key={index} test={test} index={index} />
+        {/* ── Test Case List ─── */}
+        {Array.isArray(result.testResults) && result.testResults.length > 0 && (
+          <div className="space-y-2">
+            <div
+              className="text-[9px] uppercase tracking-widest font-bold mb-3"
+              style={{ color: 'rgba(148,163,184,0.35)', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              Test Cases
+            </div>
+            {result.testResults.map((test, i) => (
+              <TestCaseItem key={i} test={test} index={i} />
             ))}
           </div>
         )}

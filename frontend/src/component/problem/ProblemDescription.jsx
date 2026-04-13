@@ -1,198 +1,218 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/atom-one-dark.css';
-import { FiTag, FiCpu, FiCheckCircle, FiCopy, FiCheck, FiTerminal, FiDatabase, FiLayers } from 'react-icons/fi';
+import {
+  FiTag, FiCpu, FiCheckCircle, FiCopy, FiCheck, FiTerminal,
+  FiDatabase, FiLayers, FiBarChart2, FiBookmark
+} from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import AiMentorTab from './AiMentor'; 
+import AiMentorTab from './AiMentor';
+import submissionService from '../../services/submissionService/submissionService';
 
-// Ambient Grid for unified aesthetic
-const AmbientGrid = () => (
-  <div 
-    className="absolute inset-0 pointer-events-none opacity-[0.03] z-0"
-    style={{
-      backgroundImage: `
-        linear-gradient(rgba(99, 102, 241, 0.8) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(99, 102, 241, 0.8) 1px, transparent 1px)
-      `,
-      backgroundSize: '24px 24px',
-      backgroundPosition: 'center center'
-    }}
-  />
-);
-
-// UX Enhancement: Copy Button Component
-const CopyButton = ({ text }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
+// ── Copy Button ───────────────────────────────────────────────────────────
+const CopyBtn = ({ text }) => {
+  const [done, setDone] = useState(false);
+  const copy = () => {
     navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast.success("Copied to clipboard", {
-      style: { background: '#0d0f1a', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" },
-      duration: 1500
+    setDone(true);
+    toast('Copied', {
+      style: { background: '#0a0c17', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', fontSize: 11, fontFamily: "'JetBrains Mono', monospace" },
+      duration: 1200,
     });
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setDone(false), 1800);
   };
-
   return (
-    <button 
-      onClick={handleCopy}
-      className="p-1.5 rounded-md hover:bg-white/10 transition-colors text-gray-500 hover:text-indigo-300"
-      title="Copy to clipboard"
+    <button
+      onClick={copy}
+      className="p-1 rounded transition-all duration-150 hover:bg-white/5"
+      style={{ color: done ? '#34d399' : 'rgba(148,163,184,0.3)' }}
     >
-      {copied ? <FiCheck size={14} className="text-emerald-400" /> : <FiCopy size={14} />}
+      {done ? <FiCheck size={12} /> : <FiCopy size={12} />}
     </button>
   );
 };
 
+// ── Difficulty ────────────────────────────────────────────────────────────
+const DIFF = {
+  easy:   { color: '#34d399', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)'  },
+  medium: { color: '#fbbf24', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)'  },
+  hard:   { color: '#f87171', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.2)'   },
+};
+
+// ── Tabs ──────────────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'description', label: 'Problem',     Icon: FiLayers   },
+  { id: 'stats',       label: 'Stats',       Icon: FiBarChart2 },
+  { id: 'submissions', label: 'History',     Icon: FiDatabase  },
+  { id: 'mentor',      label: 'AI Mentor',   Icon: FiCpu,  glow: true },
+];
+
+// ── Main Component ────────────────────────────────────────────────────────
 const ProblemDescription = ({ problem, currentCode, language, executionResult }) => {
-  const [activeTab, setActiveTab] = useState('description');
+  const [tab, setTab] = useState('description');
+  const [submission, setSubmission] = useState(null);
+  
+  // Note: imported useEffect at the top to fix undefined error
+  useEffect(() => {
+    if (tab === 'submissions') {
+      const fetchSubmission = async () => {
+        try {
+          console.log('Fetching submission for problem ID:', problem._id);
+          const submission = await submissionService.getSubmissionByProblemId(problem._id);
+          setSubmission(submission);
+        } catch (error) {
+          console.error(error);
+        }
+      };
+      fetchSubmission();
+    }
+  }, [tab, problem]);
 
   if (!problem) return null;
 
-  const getDifficultyStyles = (diff) => {
-    switch (diff?.toLowerCase()) {
-      case 'easy': 
-        return { color: '#34d399', bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)' };
-      case 'medium': 
-        return { color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.3)' };
-      case 'hard': 
-        return { color: '#fb7185', bg: 'rgba(225, 29, 72, 0.1)', border: 'rgba(225, 29, 72, 0.3)' };
-      default: 
-        return { color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.1)', border: 'rgba(156, 163, 175, 0.3)' };
-    }
-  };
-
-  const diffStyles = getDifficultyStyles(problem.difficulty);
+  const diff = DIFF[problem.difficulty?.toLowerCase()] || DIFF.easy;
 
   return (
-    <div 
-      className="flex flex-col h-full relative overflow-hidden text-gray-300"
-      style={{
-        background: 'linear-gradient(110deg, #0d0f1a 0%, #0f0d1f 50%, #0d0f1a 100%)',
-      }}
+    <div
+      className="flex flex-col h-full"
+      style={{ background: '#080a12' }}
     >
-      <AmbientGrid />
-
-      {/* --- TABS --- */}
-      <div 
-        className="relative z-10 flex border-b"
-        style={{ 
-          borderColor: 'rgba(99,102,241,0.15)',
-          background: 'rgba(13, 15, 26, 0.6)',
-          backdropFilter: 'blur(8px)'
-        }}
+      {/* ── Tab Bar ── */}
+      <div
+        className="flex items-end px-1 shrink-0"
+        style={{ borderBottom: '1px solid rgba(99,102,241,0.1)', background: '#09091a' }}
       >
-        {[
-          { id: 'description', label: 'Briefing', icon: FiLayers },
-          { id: 'submissions', label: 'Telemetry', icon: FiDatabase },
-          { id: 'mentor', label: 'AI Mentor', icon: FiCpu, isSpecial: true }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 ${
-              activeTab === tab.id
-                ? tab.isSpecial 
-                  ? 'border-fuchsia-500 text-fuchsia-400 bg-fuchsia-500/5'
-                  : 'border-indigo-500 text-indigo-300 bg-indigo-500/5'
-                : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'
-            }`}
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
-          >
-            <tab.icon size={14} className={activeTab === tab.id && tab.isSpecial ? "animate-pulse" : ""} />
-            {tab.label}
-          </button>
-        ))}
+        {TABS.map(({ id, label, Icon, glow }) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className="relative flex items-center gap-1.5 px-4 py-3 text-[10px] font-bold uppercase tracking-widest transition-all duration-150"
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                color: active
+                  ? (glow ? '#e879f9' : '#818cf8')
+                  : 'rgba(148,163,184,0.35)',
+                borderBottom: `2px solid ${active ? (glow ? '#d946ef' : '#6366f1') : 'transparent'}`,
+                marginBottom: -1,
+              }}
+            >
+              <Icon size={12} className={active && glow ? 'animate-pulse' : ''} />
+              {label}
+              {id === 'mentor' && (
+                <span
+                  className="text-[8px] px-1 py-0.5 rounded font-black"
+                  style={{ background: 'rgba(217,70,239,0.15)', color: '#e879f9', border: '1px solid rgba(217,70,239,0.25)' }}
+                >
+                  AI
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* --- CONTENT AREA --- */}
-      <div className="flex-1 relative z-10 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+      {/* ── Content ── */}
+      <div
+        className="flex-1 overflow-y-auto"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(99,102,241,0.1) transparent' }}
+      >
 
-        {activeTab === 'description' && (
-          <div className="space-y-8 max-w-4xl">
+        {/* ───────────── DESCRIPTION TAB ───────────── */}
+        {tab === 'description' && (
+          <div className="p-6 space-y-7 max-w-3xl">
 
-            {/* Header */}
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-4 tracking-tight drop-shadow-md">
-                {problem.title}
-              </h1>
-              <div className="flex items-center gap-4">
-                <span 
-                  className="px-3 py-1 rounded border text-[11px] font-bold uppercase tracking-widest"
+            {/* Title + meta */}
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <h1
+                  className="text-xl font-bold leading-tight"
+                  style={{ color: '#e2e8f0', letterSpacing: '-0.02em' }}
+                >
+                  {problem.title}
+                </h1>
+                <button
+                  className="p-1.5 rounded transition-all shrink-0 hover:bg-white/5"
+                  style={{ color: 'rgba(148,163,184,0.3)' }}
+                  title="Bookmark"
+                >
+                  <FiBookmark size={14} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <span
+                  className="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-widest"
                   style={{
-                    color: diffStyles.color,
-                    background: diffStyles.bg,
-                    borderColor: diffStyles.border,
+                    color: diff.color, background: diff.bg,
+                    border: `1px solid ${diff.border}`,
                     fontFamily: "'JetBrains Mono', monospace",
-                    boxShadow: `0 0 10px ${diffStyles.bg}`
                   }}
                 >
                   {problem.difficulty}
                 </span>
-
-                <div className="flex items-center gap-2 text-xs text-indigo-300/70 font-mono">
-                  <FiCheckCircle size={14} className="text-emerald-500/70" /> 
-                  {problem.stats?.acceptanceRate || 'N/A'}% System Acceptance
-                </div>
+                {problem.stats?.acceptanceRate != null && (
+                  <div
+                    className="flex items-center gap-1.5 text-xs"
+                    style={{ color: 'rgba(148,163,184,0.5)', fontFamily: "'JetBrains Mono', monospace" }}
+                  >
+                    <FiCheckCircle size={11} style={{ color: '#34d399' }} />
+                    {problem.stats.acceptanceRate}% accepted
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Markdown Description */}
-            <div className="prose prose-invert prose-indigo max-w-none text-indigo-100/80 leading-relaxed text-[15px]">
+            {/* Description markdown */}
+            <div
+              className="prose prose-invert max-w-none text-sm leading-relaxed"
+              style={{ color: 'rgba(200,210,230,0.75)', fontFamily: "'Inter', sans-serif" }}
+            >
               <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
                 {problem.description}
               </ReactMarkdown>
             </div>
 
             {/* Examples */}
-            {problem.examples && problem.examples.length > 0 && (
-              <div className="mt-8 space-y-6">
-                <h3 className="text-[10px] uppercase font-bold tracking-widest text-gray-500 border-b border-white/10 pb-2">
-                  Test Vectors
-                </h3>
-                {problem.examples.map((ex, index) => (
-                  <div 
-                    key={index} 
-                    className="rounded-lg border overflow-hidden"
-                    style={{
-                      background: 'rgba(13, 15, 26, 0.4)',
-                      borderColor: 'rgba(99,102,241,0.2)'
-                    }}
+            {problem.examples?.length > 0 && (
+              <div className="space-y-4">
+                <SectionLabel label="Examples" />
+                {problem.examples.map((ex, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg overflow-hidden"
+                    style={{ border: '1px solid rgba(99,102,241,0.12)', background: 'rgba(99,102,241,0.02)' }}
                   >
-                    <div className="bg-indigo-900/20 px-4 py-2 border-b border-indigo-500/20 flex justify-between items-center">
-                      <span className="text-[11px] font-bold text-indigo-300 font-mono">EXAMPLE {index + 1}</span>
-                      <FiTerminal size={12} className="text-indigo-400/50" />
+                    <div
+                      className="flex items-center justify-between px-4 py-2"
+                      style={{ borderBottom: '1px solid rgba(99,102,241,0.08)', background: 'rgba(99,102,241,0.05)' }}
+                    >
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-widest"
+                        style={{ color: '#818cf8', fontFamily: "'JetBrains Mono', monospace" }}
+                      >
+                        Example {i + 1}
+                      </span>
+                      <FiTerminal size={11} style={{ color: 'rgba(99,102,241,0.3)' }} />
                     </div>
-
-                    <div className="p-4 space-y-4 text-sm font-mono">
-                      <div>
-                        <div className="flex justify-between items-end mb-1.5">
-                           <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Input</span>
-                           <CopyButton text={ex.input} />
-                        </div>
-                        <div className="bg-[#05050a] p-3 rounded border border-white/5 text-indigo-200 break-all">
-                          {ex.input}
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex justify-between items-end mb-1.5">
-                           <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Output</span>
-                           <CopyButton text={ex.output} />
-                        </div>
-                        <div className="bg-[#05050a] p-3 rounded border border-white/5 text-emerald-300 break-all">
-                          {ex.output}
-                        </div>
-                      </div>
-
+                    <div className="p-4 space-y-3 font-mono text-xs">
+                      <IOBlock label="Input"  value={ex.input}  />
+                      <IOBlock label="Output" value={ex.output} accent />
                       {ex.explanation && (
                         <div>
-                          <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold block mb-1.5">Explanation</span>
-                          <div className="text-gray-400 text-xs leading-relaxed border-l-2 border-indigo-500/30 pl-3 py-1">
+                          <FieldLabel text="Explanation" />
+                          <p
+                            className="text-xs leading-relaxed pl-3"
+                            style={{
+                              color: 'rgba(148,163,184,0.65)',
+                              borderLeft: '2px solid rgba(99,102,241,0.25)',
+                              fontFamily: "'Inter', sans-serif",
+                            }}
+                          >
                             {ex.explanation}
-                          </div>
+                          </p>
                         </div>
                       )}
                     </div>
@@ -202,35 +222,45 @@ const ProblemDescription = ({ problem, currentCode, language, executionResult })
             )}
 
             {/* Constraints */}
-            <div className="mt-8">
-              <h3 className="text-[10px] uppercase font-bold tracking-widest text-gray-500 border-b border-white/10 pb-2 mb-4">
-                System Constraints
-              </h3>
-              <ul className="space-y-2 text-xs font-mono">
-                {(problem.constraints || ['Time Limit: 2000ms', 'Memory Limit: 256MB']).map((c, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-indigo-500 mt-0.5">▹</span>
-                    <span className="bg-indigo-500/10 text-indigo-200 px-2 py-0.5 rounded border border-indigo-500/20">{c}</span>
+            <div>
+              <SectionLabel label="Constraints" />
+              <ul className="space-y-2 mt-3">
+                {(problem.constraints || ['Time limit: 2000ms', 'Memory limit: 256MB']).map((c, i) => (
+                  <li key={i} className="flex items-center gap-2.5">
+                    <span style={{ color: 'rgba(99,102,241,0.5)', fontSize: 10 }}>▸</span>
+                    <code
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{
+                        background: 'rgba(99,102,241,0.06)',
+                        border: '1px solid rgba(99,102,241,0.12)',
+                        color: '#a5b4fc',
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                    >
+                      {c}
+                    </code>
                   </li>
                 ))}
               </ul>
             </div>
 
             {/* Tags */}
-            {problem.tags && problem.tags.length > 0 && (
-              <div className="mt-8 pt-6 border-t border-white/10">
+            {problem.tags?.length > 0 && (
+              <div className="pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                 <div className="flex flex-wrap gap-2">
                   {problem.tags.map((tag) => (
-                    <span 
-                      key={tag} 
-                      className="px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider rounded flex items-center gap-1.5 transition-colors cursor-default"
+                    <span
+                      key={tag}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider cursor-default"
                       style={{
-                        background: 'rgba(99,102,241,0.1)',
-                        border: '1px solid rgba(99,102,241,0.2)',
-                        color: '#a5b4fc',
+                        background: 'rgba(99,102,241,0.06)',
+                        border: '1px solid rgba(99,102,241,0.15)',
+                        color: '#818cf8',
+                        fontFamily: "'JetBrains Mono', monospace",
                       }}
                     >
-                      <FiTag size={10} /> {tag}
+                      <FiTag size={9} />
+                      {tag}
                     </span>
                   ))}
                 </div>
@@ -239,27 +269,201 @@ const ProblemDescription = ({ problem, currentCode, language, executionResult })
           </div>
         )}
 
-        {activeTab === 'submissions' && (
-          <div className="h-full flex flex-col items-center justify-center text-indigo-300/50 space-y-3">
-            <FiDatabase size={32} className="opacity-50" />
-            <p className="font-mono text-xs uppercase tracking-widest">Awaiting local telemetry data...</p>
+        {/* ───────────── STATS TAB ───────────── */}
+        {tab === 'stats' && (
+          <div className="p-6 space-y-4">
+            <SectionLabel label="Problem Statistics" />
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {[
+                { label: 'Acceptance Rate', value: `${problem.stats?.acceptanceRate ?? 'N/A'}%`, color: '#34d399' },
+                { label: 'Submissions',     value: problem.stats?.totalSubmissions ?? '—',         color: '#818cf8' },
+                { label: 'Accepted',        value: problem.stats?.accepted ?? '—',                 color: '#4ade80' },
+                { label: 'Difficulty',      value: problem.difficulty,                              color: DIFF[problem.difficulty?.toLowerCase()]?.color ?? '#94a3b8' },
+              ].map(({ label, value, color }) => (
+                <div
+                  key={label}
+                  className="p-4 rounded-lg"
+                  style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.1)' }}
+                >
+                  <div
+                    className="text-[9px] uppercase tracking-widest font-bold mb-2"
+                    style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+                  >
+                    {label}
+                  </div>
+                  <div
+                    className="text-lg font-bold"
+                    style={{ color, fontFamily: "'JetBrains Mono', monospace" }}
+                  >
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
-        
-        {activeTab === 'mentor' && (
-          <div className="h-full pb-4">
-            <AiMentorTab 
-               currentCode={currentCode} 
-               language={language}
-               problem={problem}
-               executionResult={executionResult}
-            />
+        {/* ───────────── HISTORY TAB ───────────── */}
+        {tab === 'submissions' && (
+          <div className="p-6 space-y-4">
+            <SectionLabel label="Submission History" />
+            <div className="mt-4 space-y-3">
+              {!submission ? (
+                <div
+                  className="p-8 text-center text-[10px] tracking-widest uppercase animate-pulse font-bold"
+                  style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  Loading History...
+                </div>
+              ) : (() => {
+                // Bulletproof extraction: checks multiple layers of nesting
+                let subs = [];
+                if (Array.isArray(submission)) {
+                  subs = submission;
+                } else if (submission?.data && Array.isArray(submission.data)) {
+                  subs = submission.data;
+                } else if (submission?.data?.data && Array.isArray(submission.data.data)) {
+                  subs = submission.data.data;
+                }
+                
+                if (subs.length === 0) {
+                  return (
+                    <div
+                      className="p-8 text-center text-[10px] tracking-widest uppercase font-bold"
+                      style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+                    >
+                      No past submissions found.
+                    </div>
+                  );
+                }
+                
+                return subs.map((sub, i) => {
+                  const isAccepted = sub.status === 'Accepted' || sub.status === 'Passed';
+                  const isPending = sub.status === 'Pending';
+                  
+                  const statusColor = isAccepted ? '#34d399' : (isPending ? '#fbbf24' : '#f87171');
+                  const statusBg = isAccepted ? 'rgba(16,185,129,0.08)' : (isPending ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)');
+                  const statusBorder = isAccepted ? 'rgba(16,185,129,0.2)' : (isPending ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)');
+
+                  return (
+                    <div
+                      key={sub._id || i}
+                      className="p-4 rounded-lg flex flex-wrap gap-4 items-center justify-between transition-colors hover:bg-white/5"
+                      style={{ background: 'rgba(99,102,241,0.02)', border: '1px solid rgba(99,102,241,0.08)' }}
+                    >
+                      {/* Left: Status & Details */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
+                            style={{
+                              color: statusColor,
+                              background: statusBg,
+                              border: `1px solid ${statusBorder}`,
+                              fontFamily: "'JetBrains Mono', monospace"
+                            }}
+                          >
+                            {sub.status || 'Unknown'}
+                          </span>
+                          <span
+                            className="text-[11px] uppercase tracking-wider font-bold"
+                            style={{ color: 'rgba(148,163,184,0.6)', fontFamily: "'JetBrains Mono', monospace" }}
+                          >
+                            Attempt #{sub.attemptNumber || subs.length - i}
+                          </span>
+                        </div>
+                        <div
+                          className="text-[10px]"
+                          style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+                        >
+                          {new Date(sub.createdAt).toLocaleString(undefined, { 
+                            month: 'short', day: 'numeric', year: 'numeric', 
+                            hour: '2-digit', minute: '2-digit' 
+                          })}
+                        </div>
+                      </div>
+                      
+                      {/* Right: Stats */}
+                      <div className="flex gap-5 text-right">
+                        {sub.executionStats && (
+                          <>
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}>Time</div>
+                              <div className="text-xs font-bold" style={{ color: '#e2e8f0', fontFamily: "'JetBrains Mono', monospace" }}>{sub.executionStats.time || '—'}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}>Memory</div>
+                              <div className="text-xs font-bold" style={{ color: '#e2e8f0', fontFamily: "'JetBrains Mono', monospace" }}>{sub.executionStats.memory || '—'}</div>
+                            </div>
+                          </>
+                        )}
+                        <div className="space-y-1">
+                          <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}>Score</div>
+                          <div className="text-xs font-bold" style={{ color: '#818cf8', fontFamily: "'JetBrains Mono', monospace" }}>{sub.score ?? '—'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         )}
 
+        {/* ───────────── MENTOR TAB ───────────── */}
+        {tab === 'mentor' && (
+          <div className="h-full p-4">
+            <AiMentorTab
+              currentCode={currentCode}
+              language={language}
+              problem={problem}
+              executionResult={executionResult}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+// ── Sub-components ────────────────────────────────────────────────────────
+const SectionLabel = ({ label }) => (
+  <div
+    className="text-[9px] uppercase tracking-[0.2em] font-bold"
+    style={{ color: 'rgba(148,163,184,0.35)', fontFamily: "'JetBrains Mono', monospace" }}
+  >
+    {label}
+  </div>
+);
+
+const FieldLabel = ({ text }) => (
+  <div
+    className="text-[9px] uppercase tracking-widest font-bold mb-1.5"
+    style={{ color: 'rgba(148,163,184,0.4)', fontFamily: "'JetBrains Mono', monospace" }}
+  >
+    {text}
+  </div>
+);
+
+const IOBlock = ({ label, value, accent }) => (
+  <div>
+    <div className="flex items-center justify-between mb-1.5">
+      <FieldLabel text={label} />
+      <CopyBtn text={value} />
+    </div>
+    <div
+      className="p-2.5 rounded text-xs"
+      style={{
+        background: '#030408',
+        border: `1px solid ${accent ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)'}`,
+        color: accent ? 'rgba(110,231,183,0.85)' : 'rgba(165,180,252,0.85)',
+        fontFamily: "'JetBrains Mono', monospace",
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all',
+      }}
+    >
+      {value}
+    </div>
+  </div>
+);
 
 export default ProblemDescription;

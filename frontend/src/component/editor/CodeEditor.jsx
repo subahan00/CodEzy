@@ -1,288 +1,432 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
-import { FiPlay, FiSend, FiCommand, FiLoader } from 'react-icons/fi';
+import {
+  FiPlay, FiSend, FiCommand, FiLoader, FiChevronUp, FiChevronDown,
+  FiMaximize2, FiMinimize2, FiRotateCcw, FiClock
+} from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import { usePollSubmission } from '../../hooks/usePollSubmission'; 
-import OutputConsole from './OutputConsole'; 
+import { usePollSubmission } from '../../hooks/usePollSubmission';
+import OutputConsole from './OutputConsole';
 import submissionService from '../../services/submissionService/submissionService';
 
-// Integrated ambient grid generation for the high-tech UI feel
-const AmbientGrid = () => (
-  <div 
-    className="absolute inset-0 pointer-events-none opacity-[0.03] z-0"
-    style={{
-      backgroundImage: `
-        linear-gradient(rgba(99, 102, 241, 0.8) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(99, 102, 241, 0.8) 1px, transparent 1px)
-      `,
-      backgroundSize: '24px 24px',
-      backgroundPosition: 'center center'
-    }}
-  />
-);
+// ── Theme Definition ──────────────────────────────────────────────────────
+const defineEditorTheme = (monaco) => {
+  monaco.editor.defineTheme('codEzy', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'comment',    foreground: '4a5578', fontStyle: 'italic' },
+      { token: 'keyword',    foreground: 'c084fc' },
+      { token: 'string',     foreground: '6ee7b7' },
+      { token: 'number',     foreground: 'fcd34d' },
+      { token: 'identifier', foreground: 'c7d2fe' },
+      { token: 'function',   foreground: '93c5fd' },
+      { token: 'type',       foreground: 'f9a8d4' },
+      { token: 'operator',   foreground: '818cf8' },
+    ],
+    colors: {
+      'editor.background':                  '#080a12',
+      'editor.foreground':                  '#c7d2fe',
+      'editorLineNumber.foreground':        '#2d3155',
+      'editorLineNumber.activeForeground':  '#6366f1',
+      'editorCursor.foreground':            '#818cf8',
+      'editor.selectionBackground':         '#312e8150',
+      'editor.lineHighlightBackground':     '#0f1125',
+      'editorIndentGuide.background':       '#1a1d35',
+      'editorIndentGuide.activeBackground': '#3730a3',
+      'editorGutter.background':            '#080a12',
+      'scrollbar.shadow':                   '#00000000',
+      'scrollbarSlider.background':         '#1e2040',
+      'scrollbarSlider.hoverBackground':    '#3730a360',
+      'scrollbarSlider.activeBackground':   '#4f46e560',
+      'editorWidget.background':            '#0d1020',
+      'editorSuggestWidget.background':     '#0d1020',
+      'editorSuggestWidget.border':         '#1e2348',
+      'editorSuggestWidget.selectedBackground': '#1e2a5c',
+    },
+  });
+};
 
-const CodeEditor = ({ code, setCode, language, setLanguage, problemId }) => {
+// ── Language Config ───────────────────────────────────────────────────────
+const LANGUAGES = [
+  { value: 'python',     label: 'Python',     ext: '.py'  },
+  { value: 'javascript', label: 'JavaScript', ext: '.js'  },
+  { value: 'cpp',        label: 'C++',        ext: '.cpp' },
+  { value: 'java',       label: 'Java',       ext: '.java'},
+];
+
+// ── Console heights ───────────────────────────────────────────────────────
+const CONSOLE_HEIGHTS = { collapsed: '38px', normal: '34%', expanded: '60%' };
+
+const CodeEditor = ({ code, setCode, language, setLanguage, problemId, onExecutionResult }) => {
   const { startPolling, status: submitStatus, result: submitResult, error: submitError } = usePollSubmission();
-  const editorRef = useRef(null);
-  
-  const [runLoading, setRunLoading] = useState(false);
-  const [runOutput, setRunOutput] = useState(null);
+  const editorRef      = useRef(null);
+  const monacoRef      = useRef(null);
+  const startTimeRef   = useRef(null);
 
+  const [runLoading, setRunLoading]       = useState(false);
+  const [runOutput,  setRunOutput]        = useState(null);
+  const [consoleMode, setConsoleMode]     = useState('normal');  // 'collapsed' | 'normal' | 'expanded'
+  const [elapsedTime, setElapsedTime]     = useState(null);
+  const [lineCount,   setLineCount]       = useState(0);
+
+  // ── Submission result toasts ──────────────────────────────────────────
   useEffect(() => {
     if (submitStatus === 'completed' && submitResult) {
-       if (submitResult.status === 'accepted') {
-         toast.success("🏆 Accepted! Great work.", {
-           style: { background: '#0d0f1a', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.3)' }
-         });
-       } else {
-         toast.error(`❌ Verdict: ${submitResult.status}`, {
-           style: { background: '#0d0f1a', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }
-         });
-       }
+      const accepted = submitResult.status === 'accepted';
+      (accepted ? toast.success : toast.error)(
+        accepted ? '🏆 Accepted! Great work.' : `❌ Verdict: ${submitResult.status}`,
+        {
+          style: {
+            background: '#080a12',
+            color:  accepted ? '#4ade80' : '#f87171',
+            border: `1px solid ${accepted ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}`,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '12px',
+          },
+          duration: 4000,
+        }
+      );
+      if (onExecutionResult) onExecutionResult(submitResult);
     }
   }, [submitStatus, submitResult]);
 
-  // 🔥 NEW: Define the custom Cyberpunk theme BEFORE Monaco mounts
-  const handleEditorBeforeMount = (monaco) => {
-    monaco.editor.defineTheme('cyber-athlete', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6366f1', fontStyle: 'italic' }, // Indigo comments
-        { token: 'keyword', foreground: 'c084fc' }, // Purple keywords
-        { token: 'string', foreground: '34d399' }, // Emerald strings
-        { token: 'number', foreground: 'fbbf24' }, // Amber numbers
-        { token: 'identifier', foreground: 'e0e7ff' }, // Light indigo variables
-        { token: 'function', foreground: '60a5fa' }, // Blue functions
-      ],
-      colors: {
-        'editor.background': '#0d0f1a', // Matches our exact container background
-        'editor.foreground': '#c7d2fe', // Soft indigo text
-        'editorLineNumber.foreground': '#4f46e550', // Faded indigo line numbers
-        'editorLineNumber.activeForeground': '#818cf8', // Bright active line number
-        'editorCursor.foreground': '#f472b6', // Neon pink cursor
-        'editor.selectionBackground': '#3730a380', // Highlighted text background
-        'editor.lineHighlightBackground': '#1e1b4b50', // Current line background
-        'editorIndentGuide.background': '#1e1b4b', // Indent lines
-        'editorIndentGuide.activeBackground': '#3730a3', // Active indent line
+  // ── Keyboard shortcuts ────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!isPending) handleRun();
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!isPending) handleSubmit();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [code, language, problemId]);
+
+  const handleBeforeMount = (monaco) => {
+    monacoRef.current = monaco;
+    defineEditorTheme(monaco);
+  };
+
+  const handleEditorMount = (editor) => {
+    editorRef.current = editor;
+    setLineCount(editor.getModel()?.getLineCount() || 0);
+    editor.onDidChangeModelContent(() => {
+      setLineCount(editor.getModel()?.getLineCount() || 0);
     });
   };
 
-  const handleEditorDidMount = (editor, monaco) => {
-    editorRef.current = editor;
-  };
+  const handleFormat = useCallback(() => {
+    editorRef.current?.getAction('editor.action.formatDocument')?.run();
+    toast('✨ Formatted', {
+      style: { background: '#080a12', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" },
+      duration: 1500,
+    });
+  }, []);
 
-  const handleFormatCode = () => {
-    if (editorRef.current) {
-      editorRef.current.getAction('editor.action.formatDocument').run();
-      toast.success("Code formatted", { 
-        icon: '✨', 
-        style: { background: '#0d0f1a', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" } 
-      });
-    }
-  };
-
-  const handleEditorChange = (value) => {
-    setCode(value);
-  };
+  const handleReset = useCallback(() => {
+    if (!confirm('Reset code to starter template?')) return;
+    setCode('');
+    toast('Code reset', { style: { background: '#080a12', color: '#94a3b8', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" } });
+  }, []);
 
   const handleRun = async () => {
-    if (!problemId) return toast.error("Problem ID missing");
-    
+    if (!problemId) return toast.error('Problem ID missing');
     setRunLoading(true);
     setRunOutput(null);
-    const loadingToast = toast.loading("Executing logic...", {
-      style: { background: '#0d0f1a', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }
+    startTimeRef.current = Date.now();
+    setElapsedTime(null);
+    const tid = toast.loading('Executing...', {
+      style: { background: '#080a12', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', fontFamily: "'JetBrains Mono', monospace", fontSize: '11px' },
     });
-    
     try {
       const res = await submissionService.runCode(language, code, problemId);
-      toast.dismiss(loadingToast);
-      toast.success("Execution complete", {
-        style: { background: '#0d0f1a', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }
+      const elapsed = ((Date.now() - startTimeRef.current) / 1000).toFixed(2);
+      setElapsedTime(elapsed);
+      toast.dismiss(tid);
+      toast.success(`Done in ${elapsed}s`, {
+        style: { background: '#080a12', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', fontFamily: "'JetBrains Mono', monospace", fontSize: '11px' },
       });
-      setRunOutput(res.data.data); 
+      setRunOutput(res.data.data);
+      if (onExecutionResult) onExecutionResult(res.data.data);
+      if (consoleMode === 'collapsed') setConsoleMode('normal');
     } catch (err) {
-      toast.dismiss(loadingToast);
-      toast.error(err.response?.data?.message || "Run failed");
+      toast.dismiss(tid);
+      toast.error(err.response?.data?.message || 'Run failed');
       setRunOutput({ error: err.message });
+      if (consoleMode === 'collapsed') setConsoleMode('normal');
     } finally {
       setRunLoading(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (!problemId) return toast.error("Problem ID missing");
-    
-    setRunOutput(null); 
-
+    if (!problemId) return toast.error('Problem ID missing');
+    setRunOutput(null);
     try {
       const response = await submissionService.createSubmission(problemId, language, code);
       const { submissionId } = response.data.data;
-
-      toast.success("Code deployed. Awaiting verdict...");
+      toast('🚀 Submitted. Awaiting verdict...', {
+        style: { background: '#080a12', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', fontFamily: "'JetBrains Mono', monospace", fontSize: '11px' },
+      });
       startPolling(submissionId);
-
+      if (consoleMode === 'collapsed') setConsoleMode('normal');
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Failed to submit code");
+      toast.error(err.response?.data?.message || 'Submission failed');
     }
   };
 
-  const displayStatus = runLoading ? 'running' : (runOutput ? 'completed' : submitStatus);
-  const displayResult = runOutput || submitResult;
-  const displayError = runOutput?.error || submitError;
-  const isPending = runLoading || submitStatus === 'running';
+  const isPending   = runLoading || submitStatus === 'running';
+  const displayStatus  = runLoading ? 'running' : (runOutput ? 'completed' : submitStatus);
+  const displayResult  = runOutput || submitResult;
+  const displayError   = runOutput?.error || submitError;
+
+  const consolePanelHeight = CONSOLE_HEIGHTS[consoleMode];
 
   return (
-    <div 
-      className="flex flex-col h-full relative overflow-hidden"
-      style={{
-        background: '#0d0f1a', // Set base background strictly to match Monaco
-        borderLeft: '1px solid rgba(99,102,241,0.15)',
-      }}
+    <div
+      className="flex flex-col h-full"
+      style={{ background: '#080a12' }}
     >
-      <AmbientGrid />
 
-      {/* Top Action Bar */}
-      <div 
-        className="relative z-10 flex justify-between items-center px-4 py-3 border-b"
-        style={{ 
-          borderColor: 'rgba(99,102,241,0.15)',
-          background: 'rgba(13, 15, 26, 0.6)',
-          backdropFilter: 'blur(8px)'
-        }}
+      {/* ── TOOLBAR ─────────────────────────────────────────────────────── */}
+      <div
+        className="flex items-center justify-between px-4 py-2 shrink-0"
+        style={{ borderBottom: '1px solid rgba(99,102,241,0.1)', background: '#09091a' }}
       >
-        <div className="flex items-center gap-3">
-          <select 
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="cursor-pointer outline-none transition-all duration-200"
-            style={{
-              background: 'rgba(99,102,241,0.05)',
-              border: '1px solid rgba(99,102,241,0.2)',
-              color: '#a5b4fc',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '11px',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}
-          >
-            <option value="javascript" className="bg-[#0d0f1a]">JavaScript</option>
-            <option value="python" className="bg-[#0d0f1a]">Python</option>
-            <option value="cpp" className="bg-[#0d0f1a]">C++</option>
-          </select>
+        {/* Language selector */}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="appearance-none cursor-pointer outline-none pr-7 pl-3 py-1.5 text-[11px] font-bold uppercase tracking-widest transition-colors"
+              style={{
+                background: 'rgba(99,102,241,0.07)',
+                border: '1px solid rgba(99,102,241,0.18)',
+                color: '#a5b4fc',
+                borderRadius: 8,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              {LANGUAGES.map(l => (
+                <option key={l.value} value={l.value} style={{ background: '#0d1020' }}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <FiChevronDown
+              size={11}
+              className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: '#6366f1' }}
+            />
+          </div>
 
-          <button
-            onClick={handleFormatCode}
-            title="Format Code"
-            className="p-2 rounded-lg transition-all duration-200 text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10"
-          >
-            <FiCommand size={14} />
-          </button>
+          {/* Utility buttons */}
+          <Btn title="Format  (Ctrl+Shift+F)" onClick={handleFormat}>
+            <FiCommand size={13} />
+          </Btn>
+          <Btn title="Reset code" onClick={handleReset}>
+            <FiRotateCcw size={13} />
+          </Btn>
         </div>
 
-        <div className="flex gap-3">
-           <button
-             onClick={handleRun}
-             disabled={isPending}
-             className="flex items-center gap-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-             style={{
-               padding: '8px 16px',
-               borderRadius: '8px',
-               fontSize: '11px',
-               fontWeight: 700,
-               fontFamily: "'JetBrains Mono', monospace",
-               letterSpacing: '0.08em',
-               textTransform: 'uppercase',
-               background: 'rgba(99,102,241,0.1)',
-               border: '1px solid rgba(99,102,241,0.3)',
-               color: '#a5b4fc',
-             }}
-           >
-             {runLoading ? <FiLoader className="animate-spin" size={12} /> : <FiPlay size={12} />}
-             {runLoading ? 'Compiling' : 'Run'}
-           </button>
+        {/* Status info */}
+        <div className="flex items-center gap-3">
+          {elapsedTime && !isPending && (
+            <span
+              className="flex items-center gap-1 text-[10px]"
+              style={{ color: 'rgba(99,102,241,0.5)', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              <FiClock size={10} />
+              {elapsedTime}s
+            </span>
+          )}
+          <span
+            className="text-[10px]"
+            style={{ color: 'rgba(99,102,241,0.35)', fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            {lineCount}L
+          </span>
+        </div>
 
-           <button
-             onClick={handleSubmit}
-             disabled={isPending}
-             className="flex items-center gap-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group"
-             style={{
-               padding: '8px 16px',
-               borderRadius: '8px',
-               fontSize: '11px',
-               fontWeight: 700,
-               fontFamily: "'JetBrains Mono', monospace",
-               letterSpacing: '0.08em',
-               textTransform: 'uppercase',
-               background: submitStatus === 'running' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.15)',
-               border: `1px solid ${submitStatus === 'running' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.5)'}`,
-               color: '#4ade80',
-             }}
-           >
-             {submitStatus === 'running' ? (
-                <FiLoader className="animate-spin" size={12} />
-             ) : (
-                <FiSend size={12} className="group-hover:translate-x-0.5 transition-transform" />
-             )}
-             {submitStatus === 'running' ? 'Evaluating' : 'Submit'}
-           </button>
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleRun}
+            disabled={isPending}
+            title="Run  (Ctrl+Enter)"
+            className="flex items-center gap-1.5 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-125 active:scale-[0.97]"
+            style={{
+              padding: '6px 14px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "'JetBrains Mono', monospace",
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              background: 'rgba(99,102,241,0.09)',
+              border: '1px solid rgba(99,102,241,0.25)',
+              color: '#a5b4fc',
+            }}
+          >
+            {runLoading
+              ? <FiLoader size={11} className="animate-spin" />
+              : <FiPlay size={11} />
+            }
+            {runLoading ? 'Running' : 'Run'}
+          </button>
+
+          <button
+            onClick={handleSubmit}
+            disabled={isPending}
+            title="Submit  (Ctrl+Shift+Enter)"
+            className="flex items-center gap-1.5 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-125 active:scale-[0.97]"
+            style={{
+              padding: '6px 14px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "'JetBrains Mono', monospace",
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              background: submitStatus === 'running' ? 'rgba(34,197,94,0.08)' : 'rgba(34,197,94,0.12)',
+              border: `1px solid ${submitStatus === 'running' ? 'rgba(34,197,94,0.25)' : 'rgba(34,197,94,0.4)'}`,
+              color: '#4ade80',
+            }}
+          >
+            {submitStatus === 'running'
+              ? <FiLoader size={11} className="animate-spin" />
+              : <FiSend size={11} />
+            }
+            {submitStatus === 'running' ? 'Judging' : 'Submit'}
+          </button>
         </div>
       </div>
 
-      {/* Editor */}
-      <div className="flex-grow relative z-10 pt-2 bg-[#0d0f1a]">
+      {/* ── EDITOR ──────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-hidden" style={{ background: '#080a12' }}>
         <Editor
           height="100%"
-          theme="cyber-athlete" // 🔥 Changed from 'vs-dark' to our custom theme
+          theme="codEzy"
           language={language}
           value={code}
-          onChange={handleEditorChange}
-          beforeMount={handleEditorBeforeMount} // 🔥 Hook to define the theme
-          onMount={handleEditorDidMount}
+          onChange={(v) => setCode(v || '')}
+          beforeMount={handleBeforeMount}
+          onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
-            fontSize: 14,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 13.5,
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
             fontLigatures: true,
+            lineHeight: 23,
             scrollBeyondLastLine: false,
             automaticLayout: true,
-            padding: { top: 16 },
-            cursorBlinking: "smooth",
-            cursorSmoothCaretAnimation: "on",
-            formatOnPaste: true,
-            renderLineHighlight: "all",
-            lineHeight: 24,
+            padding: { top: 20, bottom: 20 },
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            renderLineHighlight: 'line',
+            bracketPairColorization: { enabled: true },
+            smoothScrolling: true,
+            wordWrap: 'off',
             scrollbar: {
-              verticalScrollbarSize: 8,
-              horizontalScrollbarSize: 8,
-            }
+              verticalScrollbarSize: 5,
+              horizontalScrollbarSize: 5,
+              useShadows: false,
+            },
+            overviewRulerLanes: 0,
+            hideCursorInOverviewRuler: true,
+            overviewRulerBorder: false,
           }}
         />
       </div>
 
-      {/* Console Base */}
-      <div 
-        className="h-[30%] relative z-10"
+      {/* ── CONSOLE ─────────────────────────────────────────────────────── */}
+      <div
+        className="shrink-0 flex flex-col transition-all duration-250 ease-in-out"
         style={{
-          borderTop: '1px solid rgba(99,102,241,0.15)',
-          background: 'rgba(13, 15, 26, 0.8)',
-          backdropFilter: 'blur(12px)'
+          height: consolePanelHeight,
+          borderTop: '1px solid rgba(99,102,241,0.1)',
+          background: '#06080f',
         }}
       >
-        <OutputConsole 
-           status={displayStatus} 
-           result={displayResult} 
-           error={displayError} 
-        />
+        {/* Console header */}
+        <div
+          className="flex items-center justify-between px-4 py-2 shrink-0 cursor-pointer select-none"
+          style={{ borderBottom: '1px solid rgba(99,102,241,0.07)' }}
+          onClick={() => setConsoleMode(c => c === 'collapsed' ? 'normal' : c === 'normal' ? 'expanded' : 'collapsed')}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{
+                background: isPending ? '#fbbf24' : (displayResult ? (displayResult.status === 'accepted' ? '#4ade80' : '#f87171') : 'rgba(99,102,241,0.4)'),
+                boxShadow: isPending ? '0 0 6px rgba(251,191,36,0.6)' : 'none',
+              }}
+            />
+            <span
+              className="text-[10px] font-bold uppercase tracking-widest"
+              style={{ color: 'rgba(99,102,241,0.5)', fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              Console
+            </span>
+            {displayStatus === 'completed' && displayResult && (
+              <span
+                className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+                style={{
+                  color: displayResult.status === 'accepted' ? '#4ade80' : '#f87171',
+                  background: displayResult.status === 'accepted' ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)',
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                {displayResult.status}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] uppercase tracking-widest" style={{ color: 'rgba(99,102,241,0.3)', fontFamily: "'JetBrains Mono', monospace" }}>
+              {consoleMode === 'collapsed' ? 'expand' : consoleMode === 'normal' ? 'fullscreen' : 'collapse'}
+            </span>
+            {consoleMode === 'collapsed'
+              ? <FiChevronUp size={12} style={{ color: 'rgba(99,102,241,0.4)' }} />
+              : consoleMode === 'normal'
+              ? <FiMaximize2 size={11} style={{ color: 'rgba(99,102,241,0.4)' }} />
+              : <FiMinimize2 size={11} style={{ color: 'rgba(99,102,241,0.4)' }} />
+            }
+          </div>
+        </div>
+
+        {/* Console body */}
+        {consoleMode !== 'collapsed' && (
+          <div className="flex-1 overflow-hidden">
+            <OutputConsole
+              status={displayStatus}
+              result={displayResult}
+              error={displayError}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+// ── Utility: icon button ──────────────────────────────────────────────────
+const Btn = ({ children, onClick, title }) => (
+  <button
+    title={title}
+    onClick={onClick}
+    className="p-1.5 rounded transition-all duration-150 hover:bg-indigo-500/10 active:scale-95"
+    style={{ color: 'rgba(99,102,241,0.4)', border: '1px solid transparent' }}
+    onMouseEnter={(e) => e.currentTarget.style.color = '#818cf8'}
+    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(99,102,241,0.4)'}
+  >
+    {children}
+  </button>
+);
 
 export default CodeEditor;

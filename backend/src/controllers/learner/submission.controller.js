@@ -75,7 +75,9 @@ export const getMySubmissions = async (req, res) => {
 // getSubmissionByProblemId
 export const getSubmissionByProblemId = async (req, res) => {
   try {
-    const { problemId } = req.params;
+
+    const { id: problemId } = req.params;
+   console.log('problemId',problemId);
     if (!mongoose.Types.ObjectId.isValid(problemId)) {
       return res.status(400).json({ success: false, message: 'Invalid problem ID' });
     }

@@ -53,8 +53,16 @@ export const getUserSubmissions = async (req, res) => {
     .sort({ createdAt: -1 });
   res.json(submissions);
 }
+export const getSubmissionByProblemId = async (req, res) => {
+  comsole.log('problemId',req.params.problemId);
+  const submissions = await Submission.find({ user: req.user.id, content: req.params.problemId })
+    .select("-sourceCode -testResults")
+    .sort({ createdAt: -1 });
+  res.json(submissions);
+}
 export default {
   createSubmission,
   getSubmissionById,
-  getUserSubmissions
+  getUserSubmissions,
+  getSubmissionByProblemId
 };
