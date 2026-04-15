@@ -1,60 +1,37 @@
-import Submission from '../../models/submission.model.js';
-import User from '../../models/User.js'; // Adjust path to your User model
+import User from '../../models/User.js'; 
 
-export const getLeaderboard = async (req, res) => {
+export const getGlobalLeaderboard = async (req, res) => {
   try {
-    // 1. Aggregate Accepted Submissions
-    const leaderboard = await Submission.aggregate([
-      // A. Only look at accepted submissions
-      { $match: { status: 'accepted' } }, 
-      
-      // B. Group by User + Problem (Remove duplicate solves for same problem)
-      { 
-        $group: { 
-          _id: { user: "$user", content: "$content" },
-          lastSolvedAt: { $min: "$createdAt" } // Keep track of time for tie-breaking later
-        } 
-      },
+    const { category = 'global' } = req.query; 
 
-      // C. Group by User again to count UNIQUE solved problems
-      {
-        $group: {
-          _id: "$_id.user",
-          solvedCount: { $sum: 1 },
-          lastActivity: { $max: "$lastSolvedAt" }
-        }
-      },
+    let query = {};
+    if (category !== 'global') {
+      query = { skillLevel: category }; 
+    }
 
-      // D. Sort: More solved = Higher rank
-      { $sort: { solvedCount: -1, lastActivity: 1 } },
+    const topUsers = await User.find(query)
+      .select('username statistics.eloRating statistics.duelsWon statistics.problemsSolved avatar') 
+      .sort({ 'statistics.eloRating': -1 }) 
+      .limit(50);
+    const leaderboard = topUsers.map((user, index) => ({
+      rank: index + 1,
+      userId: user._id,
+      username: user.username,
+      elo: user.statistics?.eloRating || 1200,
+      duelsWon: user.statistics?.duelsWon || 0,
+      problemsSolved: user.statistics?.problemsSolved || 0,
+      avatar: user.avatar || null 
+    }));
 
-      // E. Limit to Top 50 (Performance)
-      { $limit: 50 },
-
-      // F. Join with User table to get Username/Email
-      {
-        $lookup: {
-          from: "users", // NOTE: Check your MongoDB collection name (usually 'users')
-          localField: "_id",
-          foreignField: "_id",
-          as: "userInfo"
-        }
-      },
-
-      // G. Clean up the output
-      {
-        $project: {
-          username: { $arrayElemAt: ["$userInfo.username", 0] },
-          email: { $arrayElemAt: ["$userInfo.email", 0] },
-          solvedCount: 1
-        }
-      }
-    ]);
-
-    res.json({ success: true, data: leaderboard });
+    res.status(200).json({
+      success: true,
+      category,
+      lastUpdated: new Date(),
+      data: leaderboard
+    });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    console.error('Leaderboard Fetch Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch leaderboard' });
   }
 };

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import axios from 'axios'; // 👈 Added for AI API call
 import CodeEditor from '../component/editor/CodeEditor';
 import ProblemDescription from '../component/problem/ProblemDescription';
+import CodeReportModal from '../component/problem/CodeReportModal'; // 👈 Import the new modal
 import problemService from '../services/problemService/problemService';
 import { FiCode, FiMaximize2, FiMinimize2, FiLayout } from 'react-icons/fi';
 
@@ -14,6 +16,11 @@ const ProblemPage = () => {
 
   // Layout modes: 'split' | 'editor-focus' | 'desc-focus'
   const [layoutMode, setLayoutMode] = useState('split');
+
+  // ── AI Report Modal State ───────────────────────────────────────────────
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportData, setReportData] = useState(null);
 
   useEffect(() => {
     const fetchProblemDetails = async () => {
@@ -36,6 +43,32 @@ const ProblemPage = () => {
     if (problem?.starterCode) {
       const template = problem.starterCode.find(sc => sc.language === newLang);
       setCode(template ? template.code : '# No starter code for this language.\n');
+    }
+  };
+
+  // ── AI Report Trigger ───────────────────────────────────────────────────
+  const handleSubmissionAccepted = async () => {
+    setIsReportModalOpen(true);
+    setIsGeneratingReport(true);
+    setReportData(null); // Reset previous report
+
+    try {
+      const token = localStorage.getItem('token');
+      // Call the backend AI evaluation route
+      const res = await axios.post('http://localhost:9999/api/ai/evaluate', {
+        code: code,
+        language: language,
+        problemId: problem._id
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setReportData(res.data.data);
+    } catch (error) {
+      console.error("AI Evaluation failed", error);
+      setReportData(null); // The modal will handle the null state by showing an error message
+    } finally {
+      setIsGeneratingReport(false);
     }
   };
 
@@ -146,9 +179,18 @@ const ProblemPage = () => {
             setLanguage={handleLanguageChange}
             problemId={problem._id}
             onExecutionResult={setLastExecutionResult}
+            onSubmissionAccepted={handleSubmissionAccepted} // 👈 Passed trigger down
           />
         </div>
       </main>
+
+      {/* ── AI CODE REPORT MODAL ── */}
+      <CodeReportModal 
+        isOpen={isReportModalOpen} 
+        onClose={() => setIsReportModalOpen(false)} 
+        reportData={reportData} 
+        isLoading={isGeneratingReport} 
+      />
     </div>
   );
 };

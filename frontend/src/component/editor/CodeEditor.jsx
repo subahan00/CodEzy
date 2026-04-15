@@ -58,7 +58,7 @@ const LANGUAGES = [
 // ── Console heights ───────────────────────────────────────────────────────
 const CONSOLE_HEIGHTS = { collapsed: '38px', normal: '34%', expanded: '60%' };
 
-const CodeEditor = ({ code, setCode, language, setLanguage, problemId, onExecutionResult }) => {
+const CodeEditor = ({ code, setCode, language, setLanguage, problemId, onExecutionResult, onSubmissionAccepted }) => {
   const { startPolling, status: submitStatus, result: submitResult, error: submitError } = usePollSubmission();
   const editorRef      = useRef(null);
   const monacoRef      = useRef(null);
@@ -88,6 +88,7 @@ const CodeEditor = ({ code, setCode, language, setLanguage, problemId, onExecuti
         }
       );
       if (onExecutionResult) onExecutionResult(submitResult);
+      if (accepted && onSubmissionAccepted) onSubmissionAccepted();
     }
   }, [submitStatus, submitResult]);
 

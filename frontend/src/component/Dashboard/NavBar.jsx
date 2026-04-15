@@ -11,7 +11,7 @@ const Navbar = () => {
     { name: 'Explore',   path: '/dashboard', icon: FiGlobe  },
     { name: 'Problems',  path: '/problems',  icon: FiCode   },
     { name: 'Courses',   path: '/courses',   icon: FiBookOpen, badge: 'New' },
-    { name: 'Events',    path: '/events',    icon: FiCalendar },
+    { name: 'Leaderboard',    path: '/leaderboard',    icon: FiCalendar },
     { name: 'World Chat',path: '/chat',      icon: FiGlobe  },
   ];
 

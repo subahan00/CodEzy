@@ -1,43 +1,64 @@
-import { generateContent } from "../services/ai/LLMserviceGROQ.js";
-// Assuming you renamed the function to getSystemPrompt as discussed, 
-// or just use buildFeedbackPrompt() without passing the user prompt to it.
+import { generateContent, evaluateCodeAnalysis } from "../services/ai/LLMserviceGROQ.js";
 import { getSystemPrompt } from "../services/ai/buildFeedback.js";
+import Content from "../models/Content.model.js"; // Adjust to your problem model
 
+// ── ROUTE 1: THE SMART MENTOR CHAT (Modules 2, 3, 4, 5, 6) ──
 export const askAI = async (req, res) => {
-    console.log('req body:', req.body);
-
-    // 1. Extract history (default to empty array) and code
-    const { prompt, history = [], code, persona } = req.body;
+    // We added 'mode' here! Default is normal_chat.
+    const { prompt, history = [], code, persona, mode = 'normal_chat' } = req.body;
 
     if (!prompt || !prompt.trim()) {
         return res.status(400).json({ message: "Prompt is required" });
     }
 
     try {
-        // 2. Get the static System Rules (the "Gordon Ramsay" persona)
-        const systemRules = getSystemPrompt(persona);
+        // 1. Get the dynamic rules based on Persona + Mode
+        const systemRules = getSystemPrompt(persona, mode);
 
-        // 3. Format the newest user message to include the code context
+        // 2. Format user message
         const newestUserMessage = `
-USER REQUEST: ${prompt}
+USER REQUEST/QUESTION: ${prompt}
 
 CURRENT EDITOR CODE:
 ${code || "No code provided."}
         `.trim();
 
-        // 4. Build the complete conversation array
         const messages = [
-            { role: "system", content: systemRules }, // Rule setter
-            ...history,                               // Past memory
-            { role: "user", content: newestUserMessage } // New question
+            { role: "system", content: systemRules },
+            ...history,
+            { role: "user", content: newestUserMessage }
         ];
 
-        // 5. Send the entire array to Groq
         const answer = await generateContent(messages);
-
         res.status(200).json({ answer });
     } catch (error) {
-        console.error("Error generating content:", error);
-        res.status(500).json({ message: "Error generating content" });
+        console.error("AI Chat Error:", error);
+        res.status(500).json({ message: "Error generating mentor response" });
     }
+};
+
+// ── ROUTE 2: THE JSON EVALUATOR (Module 1) ──
+export const getCodeReportCard = async (req, res) => {
+  try {
+    const { code, language, problemId } = req.body;
+
+    if (!code || !problemId) {
+      return res.status(400).json({ success: false, message: "Code and problemId required" });
+    }
+
+    // Fetch problem statement
+    const problem = await Content.findById(problemId);
+    if (!problem) {
+      return res.status(404).json({ success: false, message: "Problem not found" });
+    }
+
+    // Generate strict JSON analysis
+    const analysisJson = await evaluateCodeAnalysis(code, problem.problemStatement, language);
+
+    res.status(200).json({ success: true, data: analysisJson });
+
+  } catch (error) {
+    console.error("AI Evaluation Error:", error);
+    res.status(500).json({ success: false, message: "Failed to generate code analysis" });
+  }
 };
