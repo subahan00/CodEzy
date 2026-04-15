@@ -1,4 +1,4 @@
-import { generateContent, evaluateCodeAnalysis } from "../services/ai/LLMserviceGROQ.js";
+import { generateContent, evaluateCodeAnalysis, generateTestCasesFromAI } from "../services/ai/LLMserviceGROQ.js";
 import { getSystemPrompt } from "../services/ai/buildFeedback.js";
 import Content from "../models/Content.model.js"; // Adjust to your problem model
 
@@ -37,6 +37,24 @@ ${code || "No code provided."}
     }
 };
 
+export const generateTestCases = async (req, res) => {
+    try {
+        const { title, description } = req.body;
+
+        if (!title || !description) {
+            return res.status(400).json({ success: false, message: "Title and description required" });
+        }
+
+        // Call the service layer! No 'client is not defined' errors here.
+        const testCasesArray = await generateTestCasesFromAI(title, description);
+
+        res.status(200).json({ success: true, data: testCasesArray });
+
+    } catch (error) {
+        console.error("Test Case Generation Error:", error);
+        res.status(500).json({ success: false, message: "Failed to generate test cases" });
+    }
+};
 // ── ROUTE 2: THE JSON EVALUATOR (Module 1) ──
 export const getCodeReportCard = async (req, res) => {
   try {

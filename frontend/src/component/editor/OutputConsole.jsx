@@ -8,7 +8,7 @@ import {
 const TestCaseItem = ({ test, index }) => {
   const isPass = test.status === 'ACCEPTED' || test.passed === true;
   const [open, setOpen] = useState(!isPass);
-
+  console.log('test',test);
   return (
     <div
       className="rounded-lg overflow-hidden transition-all duration-150"

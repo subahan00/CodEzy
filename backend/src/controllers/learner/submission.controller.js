@@ -130,7 +130,7 @@ export const runCode = async (req, res) => {
     if (!problem) return res.status(404).json({ message: 'Problem not found' });
 
     // ✅ Fix #2: Fetch ALL test cases, not just one sample
-    const testCases = await TestCase.find({ problem: problemId });
+    const testCases = await TestCase.find({ problem: problemId }).limit(3);
     if (!testCases.length) {
       return res.status(400).json({ message: 'No test cases found for this problem' });
     }

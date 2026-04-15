@@ -9,7 +9,7 @@ const problemService = {
                     Authorization: `Bearer ${token}`
                 }
             };
-            const response = await axios.get(`${BASE_URL}/${slug}`, config);
+            const response = await axios.get(`${BASE_URL}/slug/${slug}`, config);
             return response;
         } catch (error) {
             throw error;
@@ -101,6 +101,21 @@ publishProblem: async(id)=>{
         const response = await axios.get(`${BASE_URL}/random`, config);
         return response;
     } catch (error) {
+        throw error;
+    }
+},
+getProblemById: async (id) =>{
+    try{
+        console.log('idd',id);
+        const token = localStorage.getItem("token");
+        const config = {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        };
+        const response= await axios.get(`${BASE_URL}/${id}`,config);
+        return response;
+    } catch (error){
         throw error;
     }
 }

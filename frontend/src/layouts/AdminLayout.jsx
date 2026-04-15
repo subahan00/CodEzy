@@ -45,7 +45,7 @@ const AdminLayout = () => {
             <FiPlusSquare /> Add New Problem
           </Link>
 
-          <Link to="/admin/users" className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${isActive('/admin/users')}`}>
+          <Link to="/admin/manage-users" className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${isActive('/admin/users')}`}>
             <FiUsers /> Users
           </Link>
         </nav>

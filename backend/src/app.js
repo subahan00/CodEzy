@@ -11,6 +11,7 @@ import submissionRoutes from "./routes/submission.routes.js";
 import userRoutes from "./routes/UserRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 import { setupSocketHandlers } from "./sockets/socketManager.js";
+import adminRoutes from "./routes/admin.routes.js";
 dotenv.config();
 
 const app = express();
@@ -35,7 +36,7 @@ app.use("/api/problems", problemROUTES);
 app.use("/api/submissions", submissionRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
-
+app.use("/api/admin", adminRoutes);
 app.get("/", (req, res) => {
   res.send("Backend API is Running 🚀");
 });

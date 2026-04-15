@@ -62,3 +62,40 @@ EXPECTED JSON SCHEMA:
   const content = response.choices?.[0]?.message?.content ?? "{}";
   return JSON.parse(content);
 }
+export async function generateTestCasesFromAI(title, description) {
+  if (!title || !description) throw new Error("Title and description required.");
+
+  const prompt = `
+You are an expert Competitive Programming Problem Setter creating test cases for a coding challenge.
+
+PROBLEM TITLE: ${title}
+PROBLEM DESCRIPTION:
+${description}
+
+INSTRUCTIONS:
+Generate exactly 50 test cases for this problem. 
+Include 30 standard cases and 20 tricky edge cases (e.g., empty inputs, negative numbers, zeroes, massive numbers).
+You MUST return ONLY a valid JSON object containing a "testCases" array. Do not include markdown formatting or conversational text.
+
+EXPECTED JSON SCHEMA:
+{
+  "testCases": [
+    { "input": "<string representation of input>", "output": "<string representation of expected output>" },
+    { "input": "<...>", "output": "<...>" }
+  ]
+}
+  `.trim();
+
+  const response = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "system", content: prompt }],
+    temperature: 0.2, 
+    response_format: { type: "json_object" }, // Forces a root object {...}
+  });
+
+  const content = response.choices?.[0]?.message?.content ?? "{}";
+  const parsedContent = JSON.parse(content);
+  
+  // Return just the array to the controller
+  return parsedContent.testCases || []; 
+}

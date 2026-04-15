@@ -24,7 +24,8 @@ import ProtectedRoute from './component/ProtectedRoute';
 import AdminLayout from './layouts/AdminLayout'; // The sidebar layout
 
 import Dashboard from './pages/DashBoard.jsx';
-
+import EditProblem from './pages/admin/EditProblem.jsx';
+import ManageUsers from './pages/admin/ManageUsers.jsx';
 function App() {
   return (
     <>
@@ -125,10 +126,12 @@ function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="manage-problems" element={<ManageProblems />} />
           <Route path="add-problem" element={<CreateProblems />} />
-          
+          <Route path="edit-problem/:id" element={<EditProblem />} />
+          <Route path="manage-users" element={<ManageUsers />} />
           {/* Placeholders for future features */}
           <Route path="users" element={<div className="p-10 text-white">User Management (Coming Soon)</div>} />
           <Route path="analytics" element={<div className="p-10 text-white">Analytics (Coming Soon)</div>} />
+
         </Route>
 
         {/* 404 Fallback */}

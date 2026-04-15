@@ -13,7 +13,8 @@ import {
 } from '../controllers/learner/problem.controller.js';
 import {
   deleteProblem,
-  updateProblem} from '../controllers/admin/problem.controller.js';
+  updateProblem,
+  getProblemById} from '../controllers/admin/problem.controller.js';
 
 const router = express.Router();
 
@@ -62,7 +63,7 @@ router.get(
   getRandomProblem
 );
 router.get(
-  '/:slug',
+  '/slug/:slug',
   authMiddleware,
   // isLearner,
   getProblemBySlug
@@ -81,4 +82,10 @@ router.put(
   isAdmin,
   updateProblem
 );
+router.get(
+  '/:id',
+  authMiddleware,
+  // isLearner,
+  getProblemById
+)
 export default router;

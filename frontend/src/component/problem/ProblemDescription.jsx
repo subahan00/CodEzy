@@ -179,7 +179,7 @@ const ProblemDescription = ({ problem, currentCode, language, executionResult })
             {problem.examples?.length > 0 && (
               <div className="space-y-4">
                 <SectionLabel label="Examples" />
-                {problem.examples.map((ex, i) => (
+                {problem.examples.slice(0,2).map((ex, i) => (
                   <div
                     key={i}
                     className="rounded-lg overflow-hidden"
