@@ -14,6 +14,7 @@ import ProblemPage from './pages/problemPage.jsx';
 import Leaderboard from './pages/Leaderboard/LeaderboardPage.jsx';
 import Arena from './pages/Arena.jsx';
 import DuelRoom from './pages/DuelRoom.jsx';
+import EditProfile from './pages/EditProfile.jsx';
 // --- ADMIN PAGES ---
 import ManageProblems from './pages/admin/Manageproblems.jsx';
 import CreateProblems from './pages/admin/createProblems.jsx';
@@ -106,6 +107,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/profile/edit" 
+          element={
+            <ProtectedRoute>
+              <EditProfile />
             </ProtectedRoute>
           } 
         />

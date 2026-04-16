@@ -19,5 +19,20 @@ export const profileService = {
             throw error;
         }   
     },
+    updateProfile: async (userData) => {
+        try {
+            const token = localStorage.getItem("token");
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            };
+            const response = await axios.put(`${BASE_URL}/profile`, userData, config);
+            return response.data;
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            throw error;
+        }
+    }
 };
 export default profileService;
