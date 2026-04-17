@@ -99,3 +99,44 @@ EXPECTED JSON SCHEMA:
   // Return just the array to the controller
   return parsedContent.testCases || []; 
 }
+// ── 4. FAILURE CLASSIFIER (Layer 2 Enrichment) ──
+export async function classifyFailureReason(code, problemStatement, language, verdict) {
+    // If it's a syntax/compile error, we don't need AI. We know what it is.
+    if (verdict === 'compile-error') return { category: 'syntax_error', detail: 'Compilation failed' };
+
+    const prompt = `
+You are an expert Code Reviewer. A student submitted ${language} code that received a "${verdict}" verdict.
+
+PROBLEM:
+${problemStatement}
+
+STUDENT CODE:
+${code}
+
+INSTRUCTIONS:
+Analyze the code and categorize the primary reason for failure. 
+You MUST return ONLY a valid JSON object. Do not include markdown formatting.
+
+EXPECTED JSON SCHEMA:
+{
+  "category": "<MUST BE EXACTLY ONE OF: 'logic_error', 'edge_case', 'inefficient_algo', 'misunderstood_requirements'>",
+  "detail": "<1 short sentence explaining exactly what line or concept caused the failure>"
+}
+    `.trim();
+
+    try {
+        const response = await client.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "system", content: prompt }],
+            temperature: 0.1, // Strict and analytical
+            response_format: { type: "json_object" }, 
+        });
+
+        const content = response.choices?.[0]?.message?.content ?? "{}";
+        return JSON.parse(content);
+    } catch (error) {
+        console.error("AI Classification Failed, falling back to Layer 1:", error.message);
+        // Fallback safety: If Groq times out, just return the raw verdict category
+        return { category: verdict, detail: "System could not perform deep analysis." };
+    }
+}

@@ -5,5 +5,5 @@ const router=e.Router();
 
 router.get('/my-submissions',authMiddleware,userController.getMySubmission)
 router.put('/profile', authMiddleware, userController.updateProfile);
-
+router.get('/analytics', authMiddleware, userController.getAnalytics);
 export default router;

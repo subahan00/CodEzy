@@ -15,6 +15,7 @@ import Leaderboard from './pages/Leaderboard/LeaderboardPage.jsx';
 import Arena from './pages/Arena.jsx';
 import DuelRoom from './pages/DuelRoom.jsx';
 import EditProfile from './pages/EditProfile.jsx';
+import AnalyticsPage from './pages/AnalyticsPage.jsx';
 // --- ADMIN PAGES ---
 import ManageProblems from './pages/admin/Manageproblems.jsx';
 import CreateProblems from './pages/admin/createProblems.jsx';
@@ -77,6 +78,14 @@ function App() {
               <Arena />
             </ProtectedRoute>
           }
+        />
+        <Route 
+          path="/profile/analytics" 
+          element={
+            <ProtectedRoute>
+              <AnalyticsPage />
+            </ProtectedRoute>
+          } 
         />
         <Route 
           path="/problems" 

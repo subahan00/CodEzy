@@ -123,7 +123,31 @@ const userSchema = new mongoose.Schema({
     },
     icon: String
   }],
-  
+  skills: {
+  type: Map,
+  of: Number,
+  default: {}
+},
+
+// Tracks when each skill was last practiced for decay calculation
+lastPracticed: {
+  type: Map,
+  of: Date,
+  default: {}
+},
+
+// AI-classified failure counts: { 'logic_error': 3, 'edge_case': 1, ... }
+failureProfile: {
+  type: Map,
+  of: Number,
+  default: {}
+},
+
+// Problems the user has successfully solved (used by recommendation engine)
+solvedProblems: [{
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Content'
+}],
   // Account Management
   isActive: {
     type: Boolean,

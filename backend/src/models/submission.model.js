@@ -69,7 +69,16 @@ const submissionSchema = new mongoose.Schema({
     type: Object,
     default: null
   },
+failureCategory: {
+  type: String,
+  enum: ['logic_error', 'edge_case', 'inefficient_algo', 'misunderstood_requirements', 'syntax_error', 'runtime-error', 'wrong-answer', 'time-limit-exceeded'],
+  default: null
+},
 
+failureDetail: {
+  type: String,
+  default: null
+},
   attemptNumber: {
     type: Number,
     default: 1

@@ -49,7 +49,7 @@ const ProfilePage = () => {
     try {
       const res = await profileService.fetchHistory();
       const subs = Array.isArray(res) ? res : [];
-      console.log('subs', res)
+      console.log('subs', res);
       setSubmissions(subs);
       calculateStats(subs);
       generateHeatmap(subs);
@@ -119,11 +119,51 @@ const ProfilePage = () => {
   const handleViewSubmission = async (id) => {
     try {
       const res = await submissionService.getSubmissionById(id);
-      console.log('res', res)
+      console.log('res', res);
       setSelectedSubmission(res.data.data);
     } catch (error) {
       console.error("Could not fetch submission details");
     }
+  };
+
+  // --- NEW: Render AI Failure Profile ---
+  const renderFailureProfile = () => {
+    // If the user hasn't failed enough for the AI to build a profile yet
+    console.log('user', user);
+    if (!user.failureProfile || Object.keys(user.failureProfile).length === 0) {
+      return <p className="text-gray-600 text-xs uppercase tracking-wider font-mono">Insufficient failure telemetry.</p>;
+    }
+
+    // Convert object { logic_error: 5, edge_case: 2 } to sorted array
+    const failures = Object.entries(user.failureProfile)
+      .sort(([, a], [, b]) => b - a);
+
+    const totalFailures = failures.reduce((sum, [, count]) => sum + count, 0);
+
+    return (
+      <div className="space-y-4">
+        {failures.map(([category, count]) => {
+          // Format category name (e.g., 'logic_error' -> 'Logic Error')
+          const formattedName = category.replace(/_/g, ' ');
+          const percentage = Math.round((count / totalFailures) * 100);
+
+          return (
+            <div key={category} className="group">
+              <div className="flex justify-between text-[10px] font-mono mb-1 uppercase tracking-wider">
+                <span className="text-red-400 group-hover:text-red-300 transition-colors">{formattedName}</span>
+                <span className="text-gray-500">{percentage}% ({count})</span>
+              </div>
+              <div className="w-full bg-[#161423] h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-red-500/80 h-full shadow-[0_0_10px_rgba(239,68,68,0.4)] transition-all duration-1000"
+                  style={{ width: `${percentage}%` }}
+                ></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   if (loading) return (
@@ -186,6 +226,17 @@ const ProfilePage = () => {
                 <p className="text-gray-600 text-xs uppercase tracking-wider font-mono">No telemetry data available.</p>
               )}
             </div>
+          </div>
+
+          {/* AI Weakness Analysis (Failure Profile) */}
+          <div className="bg-[#0b0914] p-6 rounded-xl border border-gray-800/60 shadow-xl relative overflow-hidden">
+            {/* Subtle red warning glow */}
+            <Link to="/profile/analytics">
+              <h3 className="text-xs uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2 relative z-10 hover:text-white transition-colors cursor-pointer">
+                <FiTarget className="text-red-500/70" /> AI Weakness Analysis
+                <span className="ml-auto text-indigo-400 text-[10px]">Full Report →</span>
+              </h3>
+            </Link>
           </div>
 
           {/* Achievements Grid */}

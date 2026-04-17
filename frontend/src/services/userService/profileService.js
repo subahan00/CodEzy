@@ -17,7 +17,7 @@ export const profileService = {
         } catch (error) {
             console.error('Error fetching history:', error);
             throw error;
-        }   
+        }
     },
     updateProfile: async (userData) => {
         try {
@@ -33,6 +33,18 @@ export const profileService = {
             console.error('Error updating profile:', error);
             throw error;
         }
-    }
+    },
+    fetchAnalytics: async () => {
+        try {
+            const token = localStorage.getItem("token");
+            const response = await axios.get(`${BASE_URL}/analytics`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return response.data.data;
+        } catch (error) {
+            console.error('Error fetching analytics:', error);
+            throw error;
+        }
+    },
 };
 export default profileService;
