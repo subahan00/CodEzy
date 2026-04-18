@@ -2,24 +2,124 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FiArrowLeft, FiActivity, FiTarget, FiZap,
-  FiCalendar, FiCode, FiAward, FiTrendingUp
+  FiCalendar, FiCode, FiAward, FiTrendingUp,
+  FiCpu
 } from 'react-icons/fi';
 
 import profileService from '../services/userService/profileService';
-import StatCard from '../component/Analytics/StatCard';
 import SkillMasteryPanel from '../component/Analytics/SkillMasteryPanel';
 import WeaknessPanel from '../component/Analytics/WeaknessPanel';
 import RecommendationCard from '../component/Analytics/RecommendationCard';
 import { JourneyChart, VelocityChart } from '../component/Analytics/ProgressCharts';
 
-const SectionCard = ({ title, icon: Icon, iconColor = 'text-indigo-400', children }) => (
-  <div className="bg-[#0b0914] border border-gray-800/60 rounded-xl p-6">
-    <h3 className="text-xs uppercase tracking-widest font-bold text-gray-500 mb-5 flex items-center gap-2">
-      <Icon size={13} className={iconColor} /> {title}
-    </h3>
+/* ─── Primitive tokens ─────────────────────────────────────────────────── */
+
+const DIFF = {
+  beginner:     { color: 'text-emerald-400', bar: 'bg-emerald-500', ring: 'ring-emerald-900/40' },
+  intermediate: { color: 'text-amber-400',   bar: 'bg-amber-500',   ring: 'ring-amber-900/40'  },
+  advanced:     { color: 'text-rose-400',    bar: 'bg-rose-500',    ring: 'ring-rose-900/40'   },
+};
+
+/* ─── Micro components ─────────────────────────────────────────────────── */
+
+const Label = ({ children }) => (
+  <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500 font-semibold">
+    {children}
+  </span>
+);
+
+const Divider = () => (
+  <div className="h-px w-full bg-gradient-to-r from-transparent via-gray-800 to-transparent" />
+);
+
+/* A number + label stacked — used in several places */
+const Metric = ({ value, label, color = 'text-white', size = 'text-4xl', sub }) => (
+  <div className="flex flex-col gap-0.5">
+    <Label>{label}</Label>
+    <span className={`font-black font-mono leading-none ${size} ${color}`}>{value}</span>
+    {sub && <span className="text-xs font-mono text-gray-600 mt-0.5">{sub}</span>}
+  </div>
+);
+
+/* ─── Stat strip ───────────────────────────────────────────────────────── */
+
+const StatStrip = ({ stats }) => (
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-800/50 rounded-2xl overflow-hidden border border-gray-800/60">
+    {stats.map(({ label, value, color, sub }, i) => (
+      <div
+        key={i}
+        className="bg-[#080611] px-6 py-5 flex flex-col gap-1 hover:bg-[#0c0919] transition-colors"
+      >
+        <Label>{label}</Label>
+        <span className={`text-3xl font-black font-mono leading-none ${color}`}>{value}</span>
+        {sub && <span className="text-xs font-mono text-gray-600">{sub}</span>}
+      </div>
+    ))}
+  </div>
+);
+
+/* ─── Section wrapper ──────────────────────────────────────────────────── */
+
+const Section = ({ icon: Icon, iconColor, label, children }) => (
+  <div>
+    {label && (
+      <div className={`flex items-center gap-2 mb-5`}>
+        {Icon && <Icon size={12} className={iconColor} />}
+        <Label>{label}</Label>
+      </div>
+    )}
     {children}
   </div>
 );
+
+/* ─── Difficulty card ──────────────────────────────────────────────────── */
+
+const DifficultyCard = ({ label, count, total, variant }) => {
+  const t = DIFF[variant] || DIFF.beginner;
+  const pct = total ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className={`relative flex flex-col gap-3 bg-[#08060f] rounded-xl p-5 ring-1 ${t.ring}`}>
+      <div className={`text-5xl font-black font-mono ${t.color}`}>{count}</div>
+      <div className="flex flex-col gap-2">
+        <Label>{label}</Label>
+        <div className="w-full h-0.5 bg-gray-800/80 rounded-full overflow-hidden">
+          <div className={`${t.bar} h-full rounded-full`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[11px] font-mono text-gray-600">{pct}% of total</span>
+      </div>
+    </div>
+  );
+};
+
+/* ─── Language pill ────────────────────────────────────────────────────── */
+
+const LangPill = ({ lang, count, pct }) => (
+  <div className="flex items-center justify-between gap-4 py-3 border-b border-gray-800/50 last:border-0">
+    <div className="flex items-center gap-3">
+      <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+      <span className="text-sm font-mono font-semibold text-gray-300">{lang}</span>
+    </div>
+    <div className="flex items-center gap-4">
+      <div className="w-28 h-px bg-gray-800 relative">
+        <div className="absolute inset-y-0 left-0 h-px bg-violet-500/70" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-mono text-gray-500 w-12 text-right">{count} runs</span>
+    </div>
+  </div>
+);
+
+/* ─── Streak cell ──────────────────────────────────────────────────────── */
+
+const StreakCell = ({ value, label, color }) => (
+  <div className="text-center">
+    <div className={`text-3xl font-black font-mono ${color}`}>{value}</div>
+    <Label>{label}</Label>
+  </div>
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PAGE
+══════════════════════════════════════════════════════════════════════════ */
 
 const AnalyticsPage = () => {
   const [data, setData] = useState(null);
@@ -34,14 +134,14 @@ const AnalyticsPage = () => {
   }, []);
 
   if (loading) return (
-    <div className="min-h-screen bg-[#06040f] flex flex-col items-center justify-center text-indigo-400 font-mono text-sm tracking-widest uppercase">
-      <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-      Compiling your stats...
+    <div className="min-h-screen bg-[#06040f] flex flex-col items-center justify-center text-indigo-400 font-mono text-xs tracking-[0.2em] uppercase gap-3">
+      <div className="w-8 h-8 border border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      Compiling stats
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen bg-[#06040f] flex items-center justify-center text-red-400 font-mono">
+    <div className="min-h-screen bg-[#06040f] flex items-center justify-center text-red-400 font-mono text-sm">
       {error}
     </div>
   );
@@ -54,150 +154,166 @@ const AnalyticsPage = () => {
     totalScore, recommendation
   } = data;
 
-  const topLang = Object.entries(languageBreakdown || {}).sort((a, b) => b[1] - a[1])[0];
+  const sortedLangs = Object.entries(languageBreakdown || {}).sort((a, b) => b[1] - a[1]);
+  const topLang = sortedLangs[0];
 
   return (
-    <div className="min-h-screen bg-[#06040f] text-gray-200 p-6 md:p-10 font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#06040f] text-gray-200 font-sans">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <Link to="/profile" className="flex items-center gap-2 text-gray-500 hover:text-white text-xs font-mono uppercase tracking-widest transition-colors mb-3">
-              <FiArrowLeft size={12} /> Back to Profile
-            </Link>
-            <h1 className="text-2xl font-black text-white tracking-tight">Analytics & Insights</h1>
-            <p className="text-gray-500 text-sm mt-1">Your full learning intelligence report</p>
-          </div>
-          <div className="text-right hidden md:block">
-            <div className="text-3xl font-black font-mono text-yellow-400">{totalScore}</div>
-            <div className="text-[10px] uppercase tracking-widest text-gray-600 font-mono">Total Score</div>
+      {/* ── Top bar ───────────────────────────────────────────────────── */}
+      <div className="border-b border-gray-800/60 bg-[#07050e]/90 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 md:px-10 py-4 flex items-center justify-between">
+          <Link
+            to="/profile"
+            className="flex items-center gap-2 text-gray-500 hover:text-white text-xs font-mono uppercase tracking-widest transition-colors"
+          >
+            <FiArrowLeft size={11} /> Profile
+          </Link>
+          <span className="text-[10px] font-mono text-gray-600 uppercase tracking-widest hidden md:block">
+            Learning Intelligence Report
+          </span>
+          <div className="flex items-center gap-2">
+            <FiAward size={13} className="text-amber-400" />
+            <span className="text-lg font-black font-mono text-amber-400">{totalScore}</span>
           </div>
         </div>
+      </div>
 
-        {/* AI Recommendation — prominent at top */}
+      <div className="max-w-5xl mx-auto px-6 md:px-10 py-12 space-y-16">
+
+        {/* ── Header ────────────────────────────────────────────────── */}
+        <div className="space-y-1">
+          <h1 className="text-3xl font-black tracking-tight text-white">Analytics & Insights</h1>
+          <p className="text-gray-500 text-sm">Full breakdown of your problem-solving progress</p>
+        </div>
+
+        {/* ── AI Recommendation ─────────────────────────────────────── */}
         <RecommendationCard recommendation={recommendation} />
 
-        {/* Top stat row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Problems Solved" value={totalSolved} color="text-white" />
-          <StatCard label="Acceptance Rate" value={`${acceptanceRate}%`} color="text-cyan-400" sub={`${totalAccepted} accepted`} />
-          <StatCard label="Current Streak" value={currentStreak} color="text-emerald-400" sub={`Best: ${longestStreak} days`} />
-          <StatCard label="Active Days (30d)" value={activeDaysLast30} color="text-indigo-400" sub="out of 30" />
+        {/* ── Key metrics ───────────────────────────────────────────── */}
+        <div className="space-y-4">
+          <StatStrip stats={[
+            { label: 'Problems Solved',  value: totalSolved,          color: 'text-white'       },
+            { label: 'Acceptance Rate',  value: `${acceptanceRate}%`, color: 'text-sky-400',    sub: `${totalAccepted} accepted` },
+            { label: 'Current Streak',   value: currentStreak,        color: 'text-emerald-400',sub: `Best: ${longestStreak} days` },
+            { label: 'Active / 30 days', value: activeDaysLast30,     color: 'text-indigo-400', sub: 'days active'               },
+          ]} />
+          <StatStrip stats={[
+            { label: 'Total Submissions', value: totalSubmissions, color: 'text-gray-300'  },
+            { label: 'Accepted',          value: totalAccepted,    color: 'text-emerald-400' },
+            { label: 'Failed',            value: totalFailed,      color: 'text-rose-400'   },
+            { label: 'Top Language',      value: topLang?.[0] ?? '—', color: 'text-violet-400', sub: topLang ? `${topLang[1]} submissions` : '' },
+          ]} />
         </div>
 
-        {/* Submission breakdown */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Submissions" value={totalSubmissions} color="text-white" />
-          <StatCard label="Accepted" value={totalAccepted} color="text-emerald-400" />
-          <StatCard label="Failed" value={totalFailed} color="text-red-400" />
-          <StatCard label="Preferred Language" value={topLang ? topLang[0] : '—'} color="text-purple-400" sub={topLang ? `${topLang[1]} submissions` : ''} />
-        </div>
+        <Divider />
 
-        {/* Difficulty breakdown */}
-        <SectionCard title="Difficulty Breakdown" icon={FiTarget} iconColor="text-yellow-400">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            {[
-              { label: 'Beginner', key: 'beginner', color: 'text-emerald-400' },
-              { label: 'Intermediate', key: 'intermediate', color: 'text-yellow-400' },
-              { label: 'Advanced', key: 'advanced', color: 'text-red-400' },
-            ].map(({ label, key, color }) => (
-              <div key={key} className="bg-[#0d0b18] rounded-lg p-4 border border-gray-800/40">
-                <div className={`text-3xl font-black font-mono ${color}`}>{solvedByDifficulty[key]}</div>
-                <div className="text-[10px] uppercase tracking-widest text-gray-600 mt-1 font-mono">{label}</div>
-                <div className="w-full bg-[#161423] h-1 rounded-full mt-3 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${color.replace('text-', 'bg-')}`}
-                    style={{ width: `${totalSolved ? (solvedByDifficulty[key] / totalSolved) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+        {/* ── Difficulty breakdown ───────────────────────────────────── */}
+        <Section icon={FiTarget} iconColor="text-amber-400" label="Difficulty Breakdown">
+          <div className="grid grid-cols-3 gap-4">
+            <DifficultyCard label="Beginner"     count={solvedByDifficulty.beginner}     total={totalSolved} variant="beginner"     />
+            <DifficultyCard label="Intermediate" count={solvedByDifficulty.intermediate} total={totalSolved} variant="intermediate" />
+            <DifficultyCard label="Advanced"     count={solvedByDifficulty.advanced}     total={totalSolved} variant="advanced"     />
           </div>
 
           {hardestSolved && (
-            <div className="mt-4 flex items-center gap-3 bg-[#0d0b18] rounded-lg border border-gray-800/40 p-4">
-              <FiAward className="text-yellow-400 shrink-0" size={18} />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-mono">Hardest problem solved</p>
-                <Link to={`/problem/${hardestSolved.slug}`} className="text-white font-bold hover:text-indigo-400 transition-colors text-sm">
+            <div className="mt-5 flex items-center gap-4 px-5 py-4 bg-[#08060f] rounded-xl ring-1 ring-gray-800/60">
+              <FiAward className="text-amber-400 shrink-0" size={16} />
+              <div className="flex-1 min-w-0">
+                <Label>Hardest problem solved</Label>
+                <Link
+                  to={`/problem/${hardestSolved.slug}`}
+                  className="block text-white font-bold hover:text-indigo-400 transition-colors text-sm mt-0.5 truncate"
+                >
                   {hardestSolved.title}
                 </Link>
               </div>
-              <span className="ml-auto text-[10px] font-mono text-red-400 uppercase border border-red-900/50 bg-red-900/20 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-wider border border-rose-900/50 bg-rose-900/20 px-2.5 py-1 rounded-md shrink-0">
                 {hardestSolved.difficulty}
               </span>
             </div>
           )}
-        </SectionCard>
+        </Section>
 
-        {/* Charts row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <SectionCard title="Problem Solving Journey" icon={FiTrendingUp} iconColor="text-indigo-400">
+        <Divider />
+
+        {/* ── Charts ────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <Section icon={FiTrendingUp} iconColor="text-indigo-400" label="Problem Solving Journey">
             <JourneyChart data={cumulativeJourney} />
-          </SectionCard>
-          <SectionCard title="Weekly Velocity" icon={FiActivity} iconColor="text-cyan-400">
+          </Section>
+          <Section icon={FiActivity} iconColor="text-sky-400" label="Weekly Velocity">
             <VelocityChart data={weeklyVelocity} />
-          </SectionCard>
+          </Section>
         </div>
 
-        {/* Skill mastery + Weakness side by side */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <SectionCard title="Skill Mastery" icon={FiZap} iconColor="text-yellow-400">
+        <Divider />
+
+        {/* ── Skill mastery + Weakness ───────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <Section icon={FiZap} iconColor="text-amber-400" label="Skill Mastery">
             <SkillMasteryPanel skillMastery={skillMastery} nearUnlock={nearUnlock} />
-          </SectionCard>
-          <SectionCard title="Weakness Analysis" icon={FiTarget} iconColor="text-red-400">
+          </Section>
+          <Section icon={FiTarget} iconColor="text-rose-400" label="Weakness Analysis">
             <WeaknessPanel failureProfile={failureProfile} />
-          </SectionCard>
+          </Section>
         </div>
 
-        {/* Language breakdown */}
-        <SectionCard title="Language Distribution" icon={FiCode} iconColor="text-purple-400">
-          <div className="flex flex-wrap gap-3">
-            {Object.entries(languageBreakdown || {}).sort((a, b) => b[1] - a[1]).map(([lang, count]) => {
-              const pct = Math.round((count / totalSubmissions) * 100);
-              return (
-                <div key={lang} className="flex-1 min-w-[120px] bg-[#0d0b18] border border-gray-800/40 rounded-lg p-4">
-                  <div className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">{lang}</div>
-                  <div className="text-2xl font-black font-mono text-white">{count}</div>
-                  <div className="text-[10px] text-gray-600 font-mono">{pct}% of submissions</div>
-                  <div className="w-full bg-[#161423] h-1 rounded-full mt-2 overflow-hidden">
-                    <div className="bg-purple-500 h-full rounded-full" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-            {!Object.keys(languageBreakdown || {}).length && (
-              <p className="text-gray-600 text-xs font-mono uppercase tracking-wider">No submission data yet.</p>
-            )}
-          </div>
-        </SectionCard>
+        <Divider />
 
-        {/* Calendar activity hint */}
-        <SectionCard title="Consistency" icon={FiCalendar} iconColor="text-blue-400">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div className="bg-[#0d0b18] rounded-lg p-4 border border-gray-800/40">
-              <div className="text-3xl font-black font-mono text-blue-400">{activeDaysLast30}</div>
-              <div className="text-[10px] uppercase tracking-widest text-gray-600 mt-1 font-mono">Active days (30d)</div>
+        {/* ── Language distribution ──────────────────────────────────── */}
+        <Section icon={FiCode} iconColor="text-violet-400" label="Language Distribution">
+          {sortedLangs.length > 0 ? (
+            <div className="divide-y divide-gray-800/50">
+              {sortedLangs.map(([lang, count]) => (
+                <LangPill
+                  key={lang}
+                  lang={lang}
+                  count={count}
+                  pct={Math.round((count / totalSubmissions) * 100)}
+                />
+              ))}
             </div>
-            <div className="bg-[#0d0b18] rounded-lg p-4 border border-gray-800/40">
-              <div className="text-3xl font-black font-mono text-emerald-400">{currentStreak}</div>
-              <div className="text-[10px] uppercase tracking-widest text-gray-600 mt-1 font-mono">Current streak</div>
-            </div>
-            <div className="bg-[#0d0b18] rounded-lg p-4 border border-gray-800/40">
-              <div className="text-3xl font-black font-mono text-yellow-400">{longestStreak}</div>
-              <div className="text-[10px] uppercase tracking-widest text-gray-600 mt-1 font-mono">Best streak</div>
-            </div>
-            <div className="bg-[#0d0b18] rounded-lg p-4 border border-gray-800/40">
-              <div className="text-3xl font-black font-mono text-purple-400">
+          ) : (
+            <p className="text-gray-600 text-xs font-mono uppercase tracking-widest">No submissions yet.</p>
+          )}
+        </Section>
+
+        <Divider />
+
+        {/* ── Consistency ───────────────────────────────────────────── */}
+        <Section icon={FiCalendar} iconColor="text-blue-400" label="Consistency">
+          <div className="flex items-start justify-between gap-8 flex-wrap">
+            <StreakCell value={activeDaysLast30} label="Active days / 30" color="text-blue-400" />
+            <StreakCell value={currentStreak}    label="Current streak"   color="text-emerald-400" />
+            <StreakCell value={longestStreak}    label="Best streak"      color="text-amber-400" />
+            <div className="text-center">
+              <div className="text-3xl leading-none">
                 {activeDaysLast30 >= 20 ? '🔥' : activeDaysLast30 >= 10 ? '📈' : '💤'}
               </div>
-              <div className="text-[10px] uppercase tracking-widest text-gray-600 mt-1 font-mono">
+              <Label>
                 {activeDaysLast30 >= 20 ? 'On fire' : activeDaysLast30 >= 10 ? 'Building up' : 'Needs consistency'}
-              </div>
+              </Label>
             </div>
           </div>
-        </SectionCard>
+
+          {/* Mini progress bar for 30-day consistency */}
+          <div className="mt-6 space-y-2">
+            <div className="flex justify-between">
+              <Label>30-day activity</Label>
+              <Label>{activeDaysLast30} / 30 days</Label>
+            </div>
+            <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-700 to-blue-400 transition-all duration-700"
+                style={{ width: `${(activeDaysLast30 / 30) * 100}%` }}
+              />
+            </div>
+          </div>
+        </Section>
+
+        {/* ── Footer spacer ─────────────────────────────────────────── */}
+        <div className="pb-8" />
 
       </div>
     </div>

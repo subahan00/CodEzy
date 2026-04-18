@@ -49,7 +49,7 @@ export async function runJavaScriptJudge(payload) {
   let sourceCode = "";
   let langKey = "";
   let testCasesToRun = [];
-
+      
   // --- INITIALIZATION ---
   if (!isDryRun && submissionId) {
     submission = await Submission.findById(submissionId);
