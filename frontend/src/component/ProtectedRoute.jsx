@@ -4,7 +4,8 @@ import { Navigate } from 'react-router-dom';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, isAuthenticated } = useAuth();
-  console.log('user', user);
+  console.log('isAuthenticated', isAuthenticated);
+  console.log('userrrr', user);
 
   if (!isAuthenticated) return <Navigate to="/" />;
   // RBAC Check
