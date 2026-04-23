@@ -8,10 +8,13 @@ const LANGUAGE_CONFIG = {
   javascript: { image: 'codezy-js-judge', fileName: 'code.js', cmd: 'node code.js' },
   python: { image: 'codezy-python-judge', fileName: 'code.py', cmd: 'python3 code.py' },
   java: { image: 'codezy-java-judge', fileName: 'Main.java', cmd: 'sh -c "javac /workspace/Main.java && java -cp /workspace Main"' },
-  cpp: { image: 'codezy-cpp-judge', fileName: 'code.cpp', cmd: 'g++ -o code code.cpp && ./code' },
+  cpp: { image: 'codezy-cpp-judge', fileName: 'code.cpp', cmd: 'sh -c "g++ -std=c++17 -o /workspace/code /workspace/code.cpp && /workspace/code"' },
 };
 
-const normalize = (str) => (str || '').replace(/\s+/g, '');
+const normalize = (val) => {
+  if (typeof val !== 'string') val = JSON.stringify(val);
+  return (val || '').replace(/\s+/g, '');
+};
 
 // ─── DRIVERS ────────────────────────────────────────────────────────────────
 // Each driver:
@@ -385,6 +388,263 @@ public class Main {
         Files.write(Paths.get("/workspace/results.json"), json.getBytes());
     }
 }
+}
+`
+
+,
+  // ── C++ driver ─────────────────────────────────────────────────────────────
+  cpp: `
+// ── ListNode (used by linked-list problems) ──────────────────────────────────
+struct ListNode {
+    int val;
+    ListNode *next;
+    ListNode() : val(0), next(nullptr) {}
+    ListNode(int x) : val(x), next(nullptr) {}
+    ListNode(int x, ListNode *next) : val(x), next(next) {}
+};
+
+// ── Batch Driver ─────────────────────────────────────────────────────────────
+template<typename T> struct JsonParser { static T parse(const std::string& s); };
+
+template<> struct JsonParser<int> { static int parse(const std::string& s) { return std::stoi(s); } };
+template<> struct JsonParser<long long> { static long long parse(const std::string& s) { return std::stoll(s); } };
+template<> struct JsonParser<double> { static double parse(const std::string& s) { return std::stod(s); } };
+template<> struct JsonParser<bool> { static bool parse(const std::string& s) { return s == "true"; } };
+template<> struct JsonParser<std::string> {
+    static std::string parse(const std::string& s) {
+        if(s.empty() || s[0] != '"') return s;
+        std::string res;
+        for(size_t i=1; i<s.length()-1; ++i) {
+            if(s[i] == '\\\\') {
+                if(i+1 < s.length()-1) {
+                    i++;
+                    if(s[i] == 'n') res += '\\n';
+                    else if(s[i] == 'r') res += '\\r';
+                    else if(s[i] == 't') res += '\\t';
+                    else res += s[i];
+                }
+            } else {
+                res += s[i];
+            }
+        }
+        return res;
+    }
+};
+
+struct Scanner {
+    std::string s;
+    size_t idx = 0;
+    Scanner(const std::string& str) : s(str) {}
+    void skip_ws() { while(idx < s.length() && isspace(s[idx])) idx++; }
+    std::string next_val() {
+        skip_ws();
+        if(idx >= s.length()) return "";
+        char c = s[idx];
+        if(c == '"') {
+            size_t start = idx++;
+            while(idx < s.length() && s[idx] != '"') {
+                if(s[idx] == '\\\\') idx += 2;
+                else idx++;
+            }
+            if(idx < s.length()) idx++;
+            return s.substr(start, idx - start);
+        }
+        if(c == '[') {
+            size_t start = idx++;
+            int depth = 1;
+            while(idx < s.length() && depth > 0) {
+                if(s[idx] == '"') {
+                    idx++;
+                    while(idx < s.length() && s[idx] != '"') {
+                        if(s[idx] == '\\\\') idx += 2;
+                        else idx++;
+                    }
+                } else if(s[idx] == '[') depth++;
+                else if(s[idx] == ']') depth--;
+                idx++;
+            }
+            return s.substr(start, idx - start);
+        }
+        size_t start = idx;
+        while(idx < s.length() && s[idx] != ',' && s[idx] != ']' && !isspace(s[idx])) idx++;
+        return s.substr(start, idx - start);
+    }
+};
+
+template<typename T> struct JsonParser<std::vector<T>> {
+    static std::vector<T> parse(const std::string& s) {
+        std::vector<T> res;
+        if(s.length() < 2 || s[0] != '[') return res;
+        Scanner scan(s.substr(1, s.length()-2));
+        while(true) {
+            scan.skip_ws();
+            if(scan.idx >= scan.s.length()) break;
+            std::string v = scan.next_val();
+            if (!v.empty()) res.push_back(JsonParser<T>::parse(v));
+            scan.skip_ws();
+            if(scan.idx < scan.s.length() && scan.s[scan.idx] == ',') scan.idx++;
+        }
+        return res;
+    }
+};
+
+template<> struct JsonParser<ListNode*> {
+    static ListNode* parse(const std::string& s) {
+        std::vector<int> arr = JsonParser<std::vector<int>>::parse(s);
+        ListNode* dummy = new ListNode();
+        ListNode* curr = dummy;
+        for(int x : arr) {
+            curr->next = new ListNode(x);
+            curr = curr->next;
+        }
+        return dummy->next;
+    }
+};
+
+std::string to_json(int x) { return std::to_string(x); }
+std::string to_json(long long x) { return std::to_string(x); }
+std::string to_json(double x) { return std::to_string(x); }
+std::string to_json(bool x) { return x ? "true" : "false"; }
+std::string to_json(const std::string& s) {
+    std::string res = "\\\"";
+    for(char c : s) {
+        if(c == '\\\\') res += "\\\\\\\\";
+        else if(c == '"') res += "\\\\\\\"";
+        else if(c == '\\n') res += "\\\\n";
+        else if(c == '\\r') res += "\\\\r";
+        else if(c == '\\t') res += "\\\\t";
+        else res += c;
+    }
+    res += "\\\"";
+    return res;
+}
+template<typename T> std::string to_json(const std::vector<T>& arr) {
+    std::string res = "[";
+    for(size_t i=0; i<arr.size(); ++i) {
+        if(i > 0) res += ",";
+        res += to_json(arr[i]);
+    }
+    res += "]";
+    return res;
+}
+std::string to_json(ListNode* head) {
+    std::string res = "[";
+    bool first = true;
+    while(head) {
+        if(!first) res += ",";
+        res += std::to_string(head->val);
+        first = false;
+        head = head->next;
+    }
+    res += "]";
+    return res;
+}
+
+template <typename T>
+T get_arg(const std::string& str) {
+    return JsonParser<T>::parse(str);
+}
+
+template <typename Class, typename... Args, std::size_t... Is>
+void invoke_helper_void(Class* obj, void (Class::*method)(Args...), const std::vector<std::string>& args_str, std::index_sequence<Is...>) {
+    (obj->*method)(get_arg<typename std::decay<Args>::type>(args_str[Is])...);
+}
+
+template <typename Class, typename... Args>
+std::string invoke(Class* obj, void (Class::*method)(Args...), const std::vector<std::string>& args_str) {
+    invoke_helper_void(obj, method, args_str, std::index_sequence_for<Args...>{});
+    return "null";
+}
+
+template <typename Ret, typename Class, typename... Args, std::size_t... Is>
+Ret invoke_helper(Class* obj, Ret (Class::*method)(Args...), const std::vector<std::string>& args_str, std::index_sequence<Is...>) {
+    return (obj->*method)(get_arg<typename std::decay<Args>::type>(args_str[Is])...);
+}
+
+template <typename Ret, typename Class, typename... Args>
+std::string invoke(Class* obj, Ret (Class::*method)(Args...), const std::vector<std::string>& args_str) {
+    Ret res = invoke_helper(obj, method, args_str, std::index_sequence_for<Args...>{});
+    return to_json(res);
+}
+
+std::vector<std::string> extract_inputs(const std::string& batch_str) {
+    std::vector<std::string> inputs;
+    size_t pos = 0;
+    while((pos = batch_str.find("\\\"input\\\":\\\"", pos)) != std::string::npos) {
+        pos += 9;
+        std::string input_val;
+        while(pos < batch_str.length()) {
+            if (batch_str[pos] == '"' && (pos == 0 || batch_str[pos-1] != '\\\\')) {
+                break;
+            }
+            if (batch_str[pos] == '\\\\') {
+                if (pos+1 < batch_str.length() && batch_str[pos+1] == '"') {
+                    input_val += '"'; pos += 2; continue;
+                }
+                if (pos+1 < batch_str.length() && batch_str[pos+1] == '\\\\') {
+                    input_val += '\\\\'; pos += 2; continue;
+                }
+                if (pos+1 < batch_str.length() && batch_str[pos+1] == 'n') {
+                    input_val += '\\n'; pos += 2; continue;
+                }
+                if (pos+1 < batch_str.length() && batch_str[pos+1] == 'r') {
+                    input_val += '\\r'; pos += 2; continue;
+                }
+                if (pos+1 < batch_str.length() && batch_str[pos+1] == 't') {
+                    input_val += '\\t'; pos += 2; continue;
+                }
+            }
+            input_val += batch_str[pos++];
+        }
+        inputs.push_back(input_val);
+    }
+    return inputs;
+}
+
+std::vector<std::string> split_lines(const std::string& str) {
+    std::vector<std::string> lines;
+    std::stringstream ss(str);
+    std::string line;
+    while(std::getline(ss, line)) {
+        if (!line.empty() && line.back() == '\\r') line.pop_back();
+        if (!line.empty()) lines.push_back(line);
+    }
+    return lines;
+}
+
+int main() {
+    std::ifstream t("/workspace/batch.json");
+    if (!t.is_open()) return 1;
+    std::string batch_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
+
+    std::vector<std::string> inputs = extract_inputs(batch_str);
+    
+    std::vector<std::string> results;
+    Solution sol;
+
+    for (const std::string& input : inputs) {
+        try {
+            std::vector<std::string> lines = split_lines(input);
+            std::string output = invoke(&sol, &Solution::solution, lines);
+            results.push_back("{\\\"status\\\":\\\"OK\\\",\\\"output\\\":" + output + "}");
+        } catch(const std::exception& e) {
+            results.push_back("{\\\"status\\\":\\\"RUNTIME_ERROR\\\",\\\"error\\\":" + to_json(std::string(e.what())) + ",\\\"output\\\":\\\"\\\"}");
+        } catch(...) {
+            results.push_back("{\\\"status\\\":\\\"RUNTIME_ERROR\\\",\\\"error\\\":\\\"Unknown error\\\",\\\"output\\\":\\\"\\\"}");
+        }
+    }
+
+    std::string json = "[";
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (i > 0) json += ",";
+        json += results[i];
+    }
+    json += "]";
+
+    std::ofstream out("/workspace/results.json");
+    out << json;
+    return 0;
+}
 `
 
 };
@@ -469,11 +729,14 @@ export async function runJavaScriptJudge(payload) {
   fs.mkdirSync(tempDir, { recursive: true });
 
   // ── 3. Write code + batch.json ──────────────────────────────────────────────
-  // Java needs imports at the very top before any class definitions
-  const javaImports = langKey === 'java'
-    ? 'import java.io.*;\nimport java.nio.file.*;\nimport java.util.*;\nimport java.lang.reflect.*;\n\n'
-    : '';
-  const fullCode = `${javaImports}${sourceCode}\n\n${DRIVERS[langKey]}`;
+  // Java and C++ need includes/imports at the very top
+  let filePrefix = '';
+  if (langKey === 'java') {
+    filePrefix = 'import java.io.*;\nimport java.nio.file.*;\nimport java.util.*;\nimport java.lang.reflect.*;\n\n';
+  } else if (langKey === 'cpp') {
+    filePrefix = '#include <iostream>\n#include <fstream>\n#include <sstream>\n#include <string>\n#include <vector>\n#include <map>\n#include <type_traits>\n#include <tuple>\n#include <utility>\n#include <iterator>\n#include <exception>\n\n';
+  }
+  const fullCode = `${filePrefix}${sourceCode}\n\n${DRIVERS[langKey]}`;
   fs.writeFileSync(path.join(tempDir, langConfig.fileName), fullCode);
 
   const batch = testCasesToRun.filter(Boolean).map(tc => ({
@@ -542,7 +805,7 @@ export async function runJavaScriptJudge(payload) {
     let caseStatus = 'ACCEPTED';
     if (result.status === 'TLE') caseStatus = 'TLE';
     else if (result.status === 'RUNTIME_ERROR') caseStatus = 'RUNTIME_ERROR';
-    else if (normalize(result.output) !== normalize(tc.expectedOutput)) caseStatus = 'WRONG_ANSWER';
+    else if (normalize(result?.output) !== normalize(tc.expectedOutput)) caseStatus = 'WRONG_ANSWER';
 
     if (caseStatus === 'ACCEPTED') {
       passedCount++;

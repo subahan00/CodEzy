@@ -13,10 +13,10 @@ export const submissionQueue = new Queue('submission-queue', {
   connection
 });
 
-// Helper function to add jobs easily
+
 export const addSubmissionToQueue = async (submissionId) => {
   await submissionQueue.add('judge-job', { submissionId }, {
-    removeOnComplete: true, // Keep Redis clean
-    removeOnFail: false     // Keep failed jobs for debugging
+    removeOnComplete: true, 
+    removeOnFail: false     
   });
 };
