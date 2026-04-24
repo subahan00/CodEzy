@@ -19,24 +19,36 @@ const AddProblem = () => {
         title: '',
         slug: '',
         difficulty: 'Easy',
-        description: ''
+        description: '',
+        inputFormat: '',
+        outputFormat: '',
+        timeLimit: 2000,
+        memoryLimit: 256,
+        tags: [],
+        constraints: []
     });
+
+    const [constraintsInput, setConstraintsInput] = useState('');
 
     const [starterCodes, setStarterCodes] = useState([
         { language: 'javascript', code: '// Write your JavaScript solution here\nfunction solution(input) {\n    return;\n}' },
         { language: 'python', code: '# Write your Python solution here\ndef solution(input):\n    pass' },
         { language: 'cpp', code: '// Write your C++ solution here\n#include <iostream>\nusing namespace std;\n\nclass Solution {\npublic:\n    void solve() {\n        \n    }\n};' }
     ]);
+    const [tags, setTags] = useState([]);
+    const [tagInput, setTagInput] = useState('');
 
     const [testCases, setTestCases] = useState([
-        { input: '', output: '' }
+        { input: '', output: '', explanation: '', isHidden: false }
     ]);
 
     // ─── Standard Handlers ───────────────────────────────────────────
     const handleInputChange = (e) => {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
-
+    const handleTagInputChange = (e) => {
+        setTagInput(e.target.value);
+    };
     const handleTitleChange = (e) => {
         const title = e.target.value;
         const slug = title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
@@ -56,7 +68,7 @@ const AddProblem = () => {
     };
 
     const addTestCase = () => {
-        setTestCases([...testCases, { input: '', output: '' }]);
+        setTestCases([...testCases, { input: '', output: '', explanation: '', isHidden: false }]);
     };
 
     const removeTestCase = (index) => {
@@ -107,7 +119,7 @@ const AddProblem = () => {
         // Filter only the ones the user kept checked
         const selectedCases = aiGeneratedCases
             .filter(tc => tc.selected)
-            .map(tc => ({ input: tc.input, output: tc.output })); 
+            .map(tc => ({ input: tc.input, output: tc.output, explanation: '', isHidden: true })); 
 
         // Clean up empty blanks in the existing main form
         const cleanedExisting = testCases.filter(tc => tc.input.trim() !== '' || tc.output.trim() !== '');
@@ -137,9 +149,17 @@ const AddProblem = () => {
                     "advanced",
                 contentType: "challenge",
                 slug: form.slug,
-                examples: testCases.map(tc => ({
+                tags: form.tags,
+                inputFormat: form.inputFormat,
+                outputFormat: form.outputFormat,
+                constraints: form.constraints,
+                timeLimit: Number(form.timeLimit) || 2000,
+                memoryLimit: Number(form.memoryLimit) || 256,
+                testCases: testCases.map(tc => ({
                     input: tc.input,
-                    output: tc.output
+                    output: tc.output,
+                    explanation: tc.explanation || '',
+                    isHidden: tc.isHidden
                 })),
                 starterCode: starterCodes
             };
@@ -208,7 +228,7 @@ const AddProblem = () => {
                     </div>
 
                     <div>
-                        <label className="block text-gray-400 text-sm mb-2">Description (Markdown)</label>
+                        <label className="block text-gray-400 text-sm mb-2">Description / Problem Statement (Markdown)</label>
                         <textarea
                             name="description"
                             value={form.description}
@@ -219,6 +239,88 @@ const AddProblem = () => {
                             required
                         />
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-gray-400 text-sm mb-2">Input Format</label>
+                            <textarea
+                                name="inputFormat"
+                                value={form.inputFormat}
+                                onChange={handleInputChange}
+                                rows="3"
+                                className="w-full bg-gray-900 border border-gray-700 rounded p-3 text-sm focus:border-green-500 focus:outline-none"
+                                placeholder="e.g. The first line contains an integer T..."
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-400 text-sm mb-2">Output Format</label>
+                            <textarea
+                                name="outputFormat"
+                                value={form.outputFormat}
+                                onChange={handleInputChange}
+                                rows="3"
+                                className="w-full bg-gray-900 border border-gray-700 rounded p-3 text-sm focus:border-green-500 focus:outline-none"
+                                placeholder="e.g. For each test case, output a single line..."
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className='block text-gray-400 text-sm mb-2'>Constraints</label>
+                            <textarea
+                                name="constraints"
+                                value={constraintsInput}
+                                onChange={(e)=>{
+                                    setConstraintsInput(e.target.value);
+                                    setForm({ ...form, constraints: e.target.value.split('\n').map(c => c.trim()).filter(Boolean) });
+                                }}
+                                rows="3"
+                                className="w-full bg-gray-900 border border-gray-700 rounded p-3 font-mono text-sm focus:border-green-500 focus:outline-none"
+                                placeholder="1 <= N <= 10^5 (One per line)"
+                            />
+                        </div>
+                        <div>
+                            <label className='block text-gray-400 text-sm mb-2'>Tags</label>
+                            <textarea
+                                name="tags"
+                                value={tagInput}
+                                onChange={(e)=>{
+                                    setTagInput(e.target.value);
+                                    setForm({ ...form, tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean) });
+                                }}
+                                rows="3"
+                                className="w-full bg-gray-900 border border-gray-700 rounded p-3 font-mono text-sm focus:border-green-500 focus:outline-none"
+                                placeholder="Arrays, Strings, Hash Table (comma separated)"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-gray-400 text-sm mb-2">Time Limit (ms)</label>
+                            <input
+                                type="number"
+                                name="timeLimit"
+                                value={form.timeLimit}
+                                onChange={handleInputChange}
+                                className="w-full bg-gray-900 border border-gray-700 rounded p-3 focus:border-green-500 focus:outline-none"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-400 text-sm mb-2">Memory Limit (MB)</label>
+                            <input
+                                type="number"
+                                name="memoryLimit"
+                                value={form.memoryLimit}
+                                onChange={handleInputChange}
+                                className="w-full bg-gray-900 border border-gray-700 rounded p-3 focus:border-green-500 focus:outline-none"
+                                required
+                            />
+                        </div>
+                    </div>
+                    
 
                     {/* --- STARTER CODE SECTION --- */}
                     <div className="pt-4 border-t border-gray-700">
@@ -270,35 +372,57 @@ const AddProblem = () => {
 
                         <div className="space-y-3">
                             {testCases.map((tc, index) => (
-                                <div key={index} className="flex gap-4 items-start bg-gray-750 p-3 rounded border border-gray-700">
-                                    <div className="flex-1">
-                                        <label className="text-xs text-gray-500 mb-1 block">Input</label>
-                                        <textarea
-                                            value={tc.input}
-                                            onChange={(e) => handleTestCaseChange(index, 'input', e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm font-mono h-20"
-                                            placeholder='e.g. [1, 2, 3]'
-                                        />
-                                    </div>
+                                <div key={index} className="flex flex-col gap-3 bg-gray-750 p-3 rounded border border-gray-700">
+                                    <div className="flex gap-4 items-start">
+                                        <div className="flex-1">
+                                            <label className="text-xs text-gray-500 mb-1 block">Input</label>
+                                            <textarea
+                                                value={tc.input}
+                                                onChange={(e) => handleTestCaseChange(index, 'input', e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm font-mono h-20 focus:border-green-500 focus:outline-none"
+                                                placeholder='e.g. [1, 2, 3]'
+                                            />
+                                        </div>
 
-                                    <div className="flex-1">
-                                        <label className="text-xs text-gray-500 mb-1 block">Expected Output</label>
-                                        <textarea
-                                            value={tc.output}
-                                            onChange={(e) => handleTestCaseChange(index, 'output', e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm font-mono h-20"
-                                            placeholder='e.g. [3, 2, 1]'
-                                        />
-                                    </div>
+                                        <div className="flex-1">
+                                            <label className="text-xs text-gray-500 mb-1 block">Expected Output</label>
+                                            <textarea
+                                                value={tc.output}
+                                                onChange={(e) => handleTestCaseChange(index, 'output', e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm font-mono h-20 focus:border-green-500 focus:outline-none"
+                                                placeholder='e.g. [3, 2, 1]'
+                                            />
+                                        </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => removeTestCase(index)}
-                                        className="mt-6 text-gray-500 hover:text-red-500 transition"
-                                        title="Remove Test Case"
-                                    >
-                                        <FiTrash2 size={18} />
-                                    </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeTestCase(index)}
+                                            className="mt-6 text-gray-500 hover:text-red-500 transition"
+                                            title="Remove Test Case"
+                                        >
+                                            <FiTrash2 size={18} />
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-4 items-center">
+                                        <div className="flex-1">
+                                            <label className="text-xs text-gray-500 mb-1 block">Explanation (Optional)</label>
+                                            <input
+                                                value={tc.explanation || ''}
+                                                onChange={(e) => handleTestCaseChange(index, 'explanation', e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm focus:border-green-500 focus:outline-none"
+                                                placeholder='Explain the test case...'
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-4 ml-2">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={tc.isHidden} 
+                                                onChange={(e) => handleTestCaseChange(index, 'isHidden', e.target.checked)}
+                                                className="w-4 h-4 text-green-600 bg-gray-800 border-gray-600 rounded"
+                                            />
+                                            <label className="text-sm font-medium text-gray-300">Hidden Test Case</label>
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
                         </div>

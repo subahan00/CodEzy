@@ -1,61 +1,81 @@
 import User from '../../models/User.js';
 
-// Standard Elo formula with K=32
 const K = 32;
+const MIN_ELO = 100; // Floor to prevent negative ratings
 
-const getExpectedScore = (ratingA, ratingB) => {
-  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-};
+const getExpectedScore = (ratingA, ratingB) =>
+  1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
 
+/**
+ * Atomically updates Elo for winner and loser.
+ *
+ * Previous bug: read both ratings → compute → write. If two duels involving
+ * the same user finished at the same millisecond, both reads got the same
+ * stale rating, both computed the same delta, and both wrote the same value —
+ * effectively one duel's Elo change was lost.
+ *
+ * Fix: read ratings once to compute deltas, then apply with $inc so MongoDB
+ * serialises concurrent writes. The delta is deterministic given the ratings
+ * at computation time; a small race window remains but its impact is one K-scaled
+ * step (~16 pts), which is acceptable for a gaming ladder.
+ */
 export const updateEloAfterDuel = async (winnerUsername, loserUsername) => {
   try {
     const [winner, loser] = await Promise.all([
-      User.findOne({ username: winnerUsername }),
-      User.findOne({ username: loserUsername })
+      User.findOne({ username: winnerUsername }).select('statistics.eloRating'),
+      User.findOne({ username: loserUsername }).select('statistics.eloRating'),
     ]);
 
     if (!winner || !loser) {
-      console.error('Elo update failed: could not find users', winnerUsername, loserUsername);
-      return;
+      console.error('Elo update failed: user(s) not found', { winnerUsername, loserUsername });
+      return null;
     }
 
-    const winnerRating = winner.statistics.eloRating;
-    const loserRating = loser.statistics.eloRating;
+    const winnerRating = winner.statistics.eloRating ?? 1000;
+    const loserRating  = loser.statistics.eloRating  ?? 1000;
 
     const expectedWinner = getExpectedScore(winnerRating, loserRating);
-    const expectedLoser = getExpectedScore(loserRating, winnerRating);
+    const expectedLoser  = getExpectedScore(loserRating,  winnerRating);
 
-    // Winner gets 1, Loser gets 0
-    const newWinnerRating = Math.round(winnerRating + K * (1 - expectedWinner));
-    const newLoserRating = Math.round(loserRating + K * (0 - expectedLoser));
+    const winnerDelta = Math.round(K * (1 - expectedWinner));
+    const loserDelta  = Math.round(K * (0 - expectedLoser));   // negative
 
-    // Update both users atomically
+    // Apply with $inc — safe against concurrent writes
     await Promise.all([
       User.findOneAndUpdate(
         { username: winnerUsername },
         {
-          $set: { 'statistics.eloRating': newWinnerRating },
-          $inc: { 'statistics.duelsWon': 1 }
-        }
+          $inc: {
+            'statistics.eloRating': winnerDelta,
+            'statistics.duelsWon': 1,
+          },
+        },
+        { new: false } // we don't need the updated doc back
       ),
       User.findOneAndUpdate(
         { username: loserUsername },
         {
-          $set: { 'statistics.eloRating': newLoserRating },
-          $inc: { 'statistics.duelsLost': 1 }
-        }
-      )
+          $inc: {
+            'statistics.eloRating': Math.max(loserDelta, MIN_ELO - loserRating),
+            'statistics.duelsLost': 1,
+          },
+        },
+        { new: false }
+      ),
     ]);
 
-    console.log(`📊 Elo updated — ${winnerUsername}: ${winnerRating} → ${newWinnerRating} | ${loserUsername}: ${loserRating} → ${newLoserRating}`);
+    const newWinnerRating = winnerRating + winnerDelta;
+    const newLoserRating  = Math.max(loserRating + loserDelta, MIN_ELO);
 
-    // Return the deltas so the frontend can show accurate numbers
-    return {
-      winnerDelta: newWinnerRating - winnerRating,
-      loserDelta: newLoserRating - loserRating
-    };
+    console.log(
+      `📊 Elo — ${winnerUsername}: ${winnerRating} → ${newWinnerRating} (+${winnerDelta})` +
+      ` | ${loserUsername}: ${loserRating} → ${newLoserRating} (${loserDelta})`
+    );
+
+    return { winnerDelta, loserDelta };
 
   } catch (err) {
     console.error('Elo update error:', err);
+    return null; // Caller must handle null
   }
 };

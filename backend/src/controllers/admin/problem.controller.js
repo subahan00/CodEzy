@@ -4,13 +4,23 @@ import TestCase from '../../models/testCase.model.js';
 export const createProblem = async (req, res) => {
   try {
     // 1. Extract testCases from the body, keep the rest as problemData
-    const { ...problemData } = req.body;
-    const testCases=problemData.examples;
-    console.log('testCases',testCases);
-    console.log('problemData',problemData);
+    const { testCases, ...problemData } = req.body;
+    console.log('testCases', testCases);
+    console.log('problemData', problemData);
+    
+    let examples = [];
+    if (testCases && Array.isArray(testCases)) {
+      examples = testCases.filter(tc => !tc.isHidden).map(tc => ({
+        input: tc.input,
+        output: tc.output,
+        explanation: tc.explanation || ''
+      }));
+    }
+
     // 2. Create the Problem (Content)
     const problem = await Content.create({
       ...problemData,
+      examples, // Set public examples array
       contentType: 'challenge',
       createdBy: req.user.userId, // Assumes you have authMiddleware running
       isPublished: true, 
@@ -25,7 +35,7 @@ export const createProblem = async (req, res) => {
         input: tc.input,
         // Frontend sends 'output', but DB Model expects 'expectedOutput'
         expectedOutput: tc.output, 
-        isHidden: true, // Default settings
+        isHidden: tc.isHidden !== undefined ? tc.isHidden : true, 
         points: 10
       }));
 

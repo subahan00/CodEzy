@@ -63,7 +63,7 @@ const loginUser = async (req, res) => {
         role: user_exist.role
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "2400h" }
     );
 
     return res.status(200).json({

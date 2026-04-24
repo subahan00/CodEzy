@@ -8,16 +8,17 @@ const redis = new IORedis({
 
 const DUEL_PREFIX = 'duel:';
 const QUEUE_KEY = 'waitingQueue';
+const DUEL_TTL = 35 * 60; // 35 min in seconds
 
 // ==========================================
 // --- ACTIVE DUELS ---
 // ==========================================
+
 export const saveDuel = async (roomId, duelData) => {
-  // Store duel as JSON, expire after 35 mins (30 min game + 5 min buffer)
   await redis.set(
     `${DUEL_PREFIX}${roomId}`,
     JSON.stringify(duelData),
-    'EX', 35 * 60
+    'EX', DUEL_TTL
   );
 };
 
@@ -34,28 +35,46 @@ export const updateDuel = async (roomId, updates) => {
   const duel = await getDuel(roomId);
   if (!duel) return null;
   const updated = { ...duel, ...updates };
+  // Refresh TTL on every update so an active game never expires mid-play
   await saveDuel(roomId, updated);
   return updated;
 };
 
+// Use SCAN instead of KEYS — non-blocking in production Redis
 export const getAllActiveDuels = async () => {
-  const keys = await redis.keys(`${DUEL_PREFIX}*`);
-  if (!keys.length) return {};
-
   const duels = {};
-  for (const key of keys) {
-    const data = await redis.get(key);
-    if (data) {
-      const duel = JSON.parse(data);
-      duels[duel.roomId] = duel;
+  let cursor = '0';
+
+  do {
+    const [nextCursor, keys] = await redis.scan(
+      cursor,
+      'MATCH', `${DUEL_PREFIX}*`,
+      'COUNT', 100
+    );
+    cursor = nextCursor;
+
+    if (keys.length) {
+      // Pipeline reads for performance
+      const pipeline = redis.pipeline();
+      keys.forEach(k => pipeline.get(k));
+      const results = await pipeline.exec();
+
+      results.forEach(([err, data]) => {
+        if (!err && data) {
+          const duel = JSON.parse(data);
+          duels[duel.roomId] = duel;
+        }
+      });
     }
-  }
+  } while (cursor !== '0');
+
   return duels;
 };
 
 // ==========================================
 // --- WAITING QUEUE ---
 // ==========================================
+
 export const addToQueue = async (userData) => {
   await redis.rpush(QUEUE_KEY, JSON.stringify(userData));
 };
@@ -88,3 +107,48 @@ export const isUserInQueue = async (username) => {
 export const clearQueue = async () => {
   await redis.del(QUEUE_KEY);
 };
+
+// ==========================================
+// --- SPECTATORS ---
+// ==========================================
+
+const SPECTATOR_PREFIX = 'spectators:';
+
+export const addSpectator = async (roomId, username) => {
+  await redis.sadd(`${SPECTATOR_PREFIX}${roomId}`, username);
+  await redis.expire(`${SPECTATOR_PREFIX}${roomId}`, DUEL_TTL);
+};
+
+export const removeSpectator = async (roomId, username) => {
+  await redis.srem(`${SPECTATOR_PREFIX}${roomId}`, username);
+};
+
+export const getSpectators = async (roomId) => {
+  return await redis.smembers(`${SPECTATOR_PREFIX}${roomId}`);
+};
+
+export const deleteSpectators = async (roomId) => {
+  await redis.del(`${SPECTATOR_PREFIX}${roomId}`);
+};
+
+// ==========================================
+// --- SOCKET → ROOM INDEX ---
+// Lets disconnect handler find the right room in O(1)
+// ==========================================
+
+const SOCKET_ROOM_PREFIX = 'socket_room:';
+
+export const setSocketRoom = async (socketId, roomId) => {
+  // Expire slightly longer than the duel
+  await redis.set(`${SOCKET_ROOM_PREFIX}${socketId}`, roomId, 'EX', DUEL_TTL + 120);
+};
+
+export const getSocketRoom = async (socketId) => {
+  return await redis.get(`${SOCKET_ROOM_PREFIX}${socketId}`);
+};
+
+export const deleteSocketRoom = async (socketId) => {
+  await redis.del(`${SOCKET_ROOM_PREFIX}${socketId}`);
+};
+
+export default redis;
