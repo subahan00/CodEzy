@@ -11,7 +11,7 @@ const DashboardProblemList = () => {
     const fetchProblems = async () => {
       try {
         const response = await problemService.getAllProblems();
-        setProblems((response.data.data || []).slice(0, 5));
+        setProblems((response.data.data || []));
       } catch (error) {
         console.error("Failed to fetch problems", error);
       } finally {

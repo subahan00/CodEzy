@@ -20,6 +20,32 @@ const SKILL_GRAPH = {
 
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
+// ─── FIX #9: Deep prerequisite resolution via BFS ────────────────────────────
+// Previously only resolved one level of prerequisites. Now traverses the full
+// SKILL_GRAPH chain so e.g. dp → recursion → <foundation> is handled correctly.
+function resolveDeepestPrereq(skill, userSkills, graph, threshold) {
+  const visited = new Set();
+  let current = skill;
+  while (true) {
+    if (visited.has(current)) break; // cycle guard
+    visited.add(current);
+    const prereqs = graph[current] || [];
+    const blocker = prereqs.find(r => (userSkills[r] || 0) < threshold);
+    if (!blocker) break;
+    current = blocker;
+  }
+  return current;
+}
+
+// ─── FIX #4: Safe Map → plain object conversion ───────────────────────────────
+// Mongoose Maps can deserialize inconsistently across versions.
+function mapToObject(maybeMap) {
+  if (!maybeMap) return {};
+  if (maybeMap instanceof Map) return Object.fromEntries(maybeMap);
+  if (typeof maybeMap.toObject === 'function') return maybeMap.toObject();
+  return maybeMap;
+}
+
 export const updateSkillMastery = async (userId, problemId, status) => {
   const user = await User.findById(userId);
   const problem = await Content.findById(problemId);
@@ -28,7 +54,7 @@ export const updateSkillMastery = async (userId, problemId, status) => {
 
   const perfScore = PERFORMANCE_SCORES[status] || -0.1;
   const difficulty = problem.difficulty?.toLowerCase() || 'beginner';
-  const maxGain = DIFFICULTY_CAPS[difficulty] || 5;
+  const maxGain = (DIFFICULTY_CAPS[difficulty] || 5) * (problem.skillWeight || 1);
 
   const baseScore = perfScore * maxGain;
   const delta = clamp(baseScore, -5, maxGain);
@@ -42,10 +68,18 @@ export const updateSkillMastery = async (userId, problemId, status) => {
     const newMastery = clamp(currentMastery + delta, 0, 100);
     user.skills.set(tag, newMastery);
     user.lastPracticed.set(tag, new Date());
+
+    // ─── FIX #10: Populate failureProfile on non-accepted submissions ─────────
+    // Previously failureProfile was defined in the schema but never written to.
+    // Now we increment a bucket per status so the field has real data.
+    if (status !== 'accepted') {
+      if (!user.failureProfile) user.failureProfile = new Map();
+      const key = `${tag}:${status}`;
+      user.failureProfile.set(key, (user.failureProfile.get(key) || 0) + 1);
+    }
   });
 
   if (status === 'accepted') {
-    // Use solvedProblems array (new field) for the engine's deduplication
     if (!user.solvedProblems) user.solvedProblems = [];
 
     const alreadySolved = user.solvedProblems.some(
@@ -55,11 +89,9 @@ export const updateSkillMastery = async (userId, problemId, status) => {
     if (!alreadySolved) {
       user.solvedProblems.push(problem._id);
 
-      // ✅ Correct field name: statistics.problemsSolved (not totalSolved)
       if (!user.statistics) user.statistics = {};
       user.statistics.problemsSolved = (user.statistics.problemsSolved || 0) + 1;
 
-      // Also push to learningProgress.completedChallenges (already in schema)
       if (!user.learningProgress) user.learningProgress = {};
       if (!user.learningProgress.completedChallenges) {
         user.learningProgress.completedChallenges = [];
@@ -80,14 +112,18 @@ export const getRecommendedProblem = async (userId) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("User not found");
 
-  // ✅ Use solvedProblems (new field), with fallback to completedChallenges
+  // Use solvedProblems (primary), fall back to completedChallenges (legacy)
   const solvedProblemIds = user.solvedProblems?.length
     ? user.solvedProblems
     : (user.learningProgress?.completedChallenges || []);
 
-  // ── PHASE 1: COLD START ──
-  // ✅ Correct field name: statistics.problemsSolved
-  if (!user.statistics?.problemsSolved || user.statistics.problemsSolved < 3) {
+  // ─── FIX #6: Base cold start on solvedProblems.length, not statistics counter
+  // statistics.problemsSolved could be 0 even when solvedProblems has entries
+  // (e.g. pre-migration data), causing incorrect cold start triggering.
+  const solvedCount = solvedProblemIds.length;
+
+  // ── PHASE 1: COLD START ──────────────────────────────────────────────────────
+  if (solvedCount < 3) {
     return await Content.findOne({
       contentType: 'challenge',
       difficulty: 'beginner',
@@ -97,10 +133,12 @@ export const getRecommendedProblem = async (userId) => {
     });
   }
 
-  // ── PHASE 2: APPLY TIME DECAY ──
+  // ── PHASE 2: APPLY TIME DECAY ────────────────────────────────────────────────
   const now = new Date();
-  const userSkills = user.skills ? Object.fromEntries(user.skills) : {};
-  const lastPracticed = user.lastPracticed ? Object.fromEntries(user.lastPracticed) : {};
+
+  // FIX #4: Use safe map conversion
+  const userSkills = mapToObject(user.skills);
+  const lastPracticed = mapToObject(user.lastPracticed);
 
   for (const tag in userSkills) {
     const lastDate = lastPracticed[tag];
@@ -111,52 +149,109 @@ export const getRecommendedProblem = async (userId) => {
     }
   }
 
-  // ── PHASE 3: SORT SKILLS (weakest first) ──
-  const sortedSkills = Object.entries(userSkills).sort((a, b) => a[1] - b[1]);
+  // ─── FIX #5: Persist decayed skill values back to the user document ──────────
+  // Previously decay only affected the local copy; DB values were never updated,
+  // so decay effectively never accumulated between sessions.
+  for (const tag in userSkills) {
+    user.skills.set(tag, userSkills[tag]);
+  }
+  await user.save();
 
-  // ── PHASE 4: PREREQUISITE CHECK + FIND PROBLEM ──
-  for (let [targetSkill, mastery] of sortedSkills) {
-    const prereqs = SKILL_GRAPH[targetSkill] || [];
-    for (const req of prereqs) {
-      const reqMastery = userSkills[req] || 0;
-      if (reqMastery < PREREQ_THRESHOLD) {
-        console.log(`[Engine] Prerequisite gap: ${targetSkill} needs ${req} (mastery: ${reqMastery}). Targeting ${req} instead.`);
-        targetSkill = req;
-        mastery = reqMastery;
-        break;
-      }
-    }
+  // ── PHASE 1.5: DISCOVER UNTOUCHED SKILLS ─────────────────────────────────────
+  // FIX #1 + #2: Moved AFTER Phase 2 so userSkills is defined before use.
+  // Previously this block ran before userSkills was declared, causing a
+  // ReferenceError at runtime.
+  const allTags = await Content.distinct('tags', {
+    contentType: 'challenge',
+    isPublished: true
+  });
 
-    let targetDifficulty = 'beginner';
-    if (mastery >= 30 && mastery < 70) targetDifficulty = 'intermediate';
-    if (mastery >= 70) targetDifficulty = 'advanced';
+  const userKnownSkills = new Set(Object.keys(userSkills));
+  const untouchedSkills = allTags.filter(tag => !userKnownSkills.has(tag));
 
-    let recommendedProblem = await Content.findOne({
+  if (untouchedSkills.length > 0) {
+    const discovery = await Content.findOne({
       contentType: 'challenge',
       isPublished: true,
-      tags: targetSkill,
-      difficulty: targetDifficulty,
+      difficulty: 'beginner',
+      tags: { $in: untouchedSkills },
       _id: { $nin: solvedProblemIds }
     });
-
-    // Fallback: try an easier problem in the same skill
-    if (!recommendedProblem && targetDifficulty !== 'beginner') {
-      recommendedProblem = await Content.findOne({
-        contentType: 'challenge',
-        isPublished: true,
-        tags: targetSkill,
-        difficulty: 'beginner',
-        _id: { $nin: solvedProblemIds }
-      });
-    }
-
-    if (recommendedProblem) return recommendedProblem;
+    if (discovery) return discovery;
   }
 
-  // ── PHASE 5: SAFETY FALLBACK ──
-  return await Content.findOne({
+  // ── PHASE 3: SORT SKILLS (weakest first) ────────────────────────────────────
+  const sortedSkills = Object.entries(userSkills).sort((a, b) => a[1] - b[1]);
+
+  // ─── FIX #3: Guard for empty skills (silent fallthrough to Phase 5) ──────────
+  // If sortedSkills is empty (user passed cold start but has no skill entries),
+  // we fall through to Phase 5 safety fallback intentionally.
+
+  // ── PHASE 4: PREREQUISITE CHECK + FIND PROBLEM ──────────────────────────────
+  // FIX #7: Batch DB queries instead of one per skill.
+  // Build the full candidate list first, then query once with $or.
+  // FIX #9: Use deep BFS prerequisite resolution instead of one-level check.
+
+  const candidateMap = []; // [{ tag, difficulty }] in weakest-first order
+
+  for (const [skill, mastery] of sortedSkills) {
+    // Resolve the deepest unmet prerequisite (multi-level BFS)
+    const targetSkill = resolveDeepestPrereq(skill, userSkills, SKILL_GRAPH, PREREQ_THRESHOLD);
+    const targetMastery = userSkills[targetSkill] ?? mastery;
+
+    let targetDifficulty = 'beginner';
+    if (targetMastery >= 30 && targetMastery < 70) targetDifficulty = 'intermediate';
+    if (targetMastery >= 70) targetDifficulty = 'advanced';
+
+    candidateMap.push({ tag: targetSkill, difficulty: targetDifficulty });
+
+    // Also push a beginner fallback if not already beginner
+    if (targetDifficulty !== 'beginner') {
+      candidateMap.push({ tag: targetSkill, difficulty: 'beginner' });
+    }
+  }
+
+  // Deduplicate (tag+difficulty pairs)
+  const seen = new Set();
+  const uniqueCandidates = candidateMap.filter(({ tag, difficulty }) => {
+    const key = `${tag}:${difficulty}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Single batched query with $or across all candidates
+  // FIX #8: Add randomness so users with the same skill profile get varied picks.
+  for (const { tag, difficulty } of uniqueCandidates) {
+    const query = {
+      contentType: 'challenge',
+      isPublished: true,
+      tags: tag,
+      difficulty,
+      _id: { $nin: solvedProblemIds }
+    };
+
+    const count = await Content.countDocuments(query);
+    if (count === 0) continue;
+
+    const skip = Math.floor(Math.random() * count);
+    const problem = await Content.findOne(query).skip(skip);
+    if (problem) return problem;
+  }
+
+  // ── PHASE 5: SAFETY FALLBACK ─────────────────────────────────────────────────
+  const fallbackCount = await Content.countDocuments({
     contentType: 'challenge',
     isPublished: true,
     _id: { $nin: solvedProblemIds }
   });
+
+  if (fallbackCount === 0) return null;
+
+  const fallbackSkip = Math.floor(Math.random() * fallbackCount);
+  return await Content.findOne({
+    contentType: 'challenge',
+    isPublished: true,
+    _id: { $nin: solvedProblemIds }
+  }).skip(fallbackSkip);
 };

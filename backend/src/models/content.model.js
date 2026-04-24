@@ -112,6 +112,14 @@ const contentSchema = new mongoose.Schema(
       ref: 'User',
       required: true
     },
+
+    skillWeight: {
+      type: Number,
+      default: 1.0,
+      min: 0.5,
+      max: 2.0
+    },
+
     isPublished: {
       type: Boolean,
       default: false
@@ -130,14 +138,16 @@ const contentSchema = new mongoose.Schema(
 // =====================
 // Slug Generator
 // =====================
-contentSchema.pre('save', function () {
+// ─── FIX #11: pre('save') hook must call next() or be declared async ──────────
+// In Mongoose < 7, omitting next() in a synchronous pre-hook causes saves to
+// hang indefinitely. Using async form avoids the issue entirely.
+contentSchema.pre('save', async function () {
   if (this.isModified('title')) {
     this.slug = this.title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
   }
-  // next();
 });
 
 const Content = mongoose.model('Content', contentSchema);

@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     minlength: 8,
-    select: false // Don't return password by default
+    select: false
   },
   username: {
     type: String,
@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  
+
   // Role & Profile
   role: {
     type: String,
@@ -51,7 +51,7 @@ const userSchema = new mongoose.Schema({
     maxlength: 500,
     default: ''
   },
-  
+
   // Statistics & Gamification
   statistics: {
     totalScore: {
@@ -83,7 +83,7 @@ const userSchema = new mongoose.Schema({
       default: 1200
     }
   },
-  
+
   // Progress Tracking
   learningProgress: {
     completedTutorials: [{
@@ -112,7 +112,7 @@ const userSchema = new mongoose.Schema({
       }
     }]
   },
-  
+
   // Achievements
   achievements: [{
     name: String,
@@ -123,31 +123,39 @@ const userSchema = new mongoose.Schema({
     },
     icon: String
   }],
+
+  // Adaptive engine: per-tag mastery score (0–100)
   skills: {
-  type: Map,
-  of: Number,
-  default: {}
-},
+    type: Map,
+    of: Number,
+    default: {}
+  },
 
-// Tracks when each skill was last practiced for decay calculation
-lastPracticed: {
-  type: Map,
-  of: Date,
-  default: {}
-},
+  // Tracks when each skill was last practiced (for decay calculation)
+  lastPracticed: {
+    type: Map,
+    of: Date,
+    default: {}
+  },
 
-// AI-classified failure counts: { 'logic_error': 3, 'edge_case': 1, ... }
-failureProfile: {
-  type: Map,
-  of: Number,
-  default: {}
-},
+  // ─── FIX #10: failureProfile is now written to by updateSkillMastery ─────────
+  // Stores per-tag failure counts keyed as "tag:status"
+  // e.g. { 'arrays:wrong-answer': 3, 'dp:runtime-error': 1 }
+  // Previously this field was declared but never populated anywhere.
+  failureProfile: {
+    type: Map,
+    of: Number,
+    default: {}
+  },
 
-// Problems the user has successfully solved (used by recommendation engine)
-solvedProblems: [{
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Content'
-}],
+  // Problems the user has successfully solved (used by recommendation engine)
+  // ─── FIX #6 note: cold start now uses solvedProblems.length, not ────────────
+  // statistics.problemsSolved, so these two stay in sync automatically.
+  solvedProblems: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Content'
+  }],
+
   // Account Management
   isActive: {
     type: Boolean,
@@ -162,7 +170,7 @@ solvedProblems: [{
   passwordResetExpires: Date,
   lastLogin: Date,
   lastActivityDate: Date,
-  
+
   // Preferences
   preferences: {
     emailNotifications: {
@@ -186,10 +194,9 @@ solvedProblems: [{
 }, {
   timestamps: true
 });
-// Hash password before saving
 
 // Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 

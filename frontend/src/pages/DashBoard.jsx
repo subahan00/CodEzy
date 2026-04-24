@@ -592,7 +592,7 @@ const Dashboard = () => {
             <div>
               <SectionHeading
                 label="// problem set"
-                action={{ to: '/problems', label: 'browse all' }}
+                action={{ to: '/problems', label: '' }}
                 delay={180}
               />
               <div
