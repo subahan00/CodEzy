@@ -17,7 +17,7 @@ import DuelRoom from './pages/DuelRoom.jsx';
 import EditProfile from './pages/EditProfile.jsx';
 import AnalyticsPage from './pages/AnalyticsPage.jsx';
 // --- ADMIN PAGES ---
-import ManageProblems from './pages/admin/Manageproblems.jsx';
+import ManageProblems from './pages/admin/ManageProblems.jsx';
 import CreateProblems from './pages/admin/createProblems.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx'; // The new dashboard we just made
 
