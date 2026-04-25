@@ -5,7 +5,7 @@ import {
   FiMinus, FiSearch, FiRefreshCw 
 } from 'react-icons/fi';
 import { GiCrossedSwords } from 'react-icons/gi';
-import Navbar from '../../component/Dashboard/Navbar'; 
+import Navbar from '../../component/Dashboard/NavBar'; 
 import LeaderboardService from '../../services/leaderboardService/leaderboardService';
 const CATEGORIES = ['global', 'beginner', 'intermediate', 'advanced'];
 

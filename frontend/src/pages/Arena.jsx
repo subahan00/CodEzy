@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import Navbar from '../component/Dashboard/Navbar';
+import Navbar from '../component/Dashboard/NavBar';
 import { FiCrosshair, FiLoader, FiEye } from 'react-icons/fi';
 
 // Stable singleton — same fix as DuelRoom so both pages share one connection

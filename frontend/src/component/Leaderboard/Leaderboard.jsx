@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FiAward, FiTrendingUp, FiCrosshair, FiUser } from 'react-icons/fi';
-import Navbar from '../Dashboard/Navbar'; // Adjust path
+import Navbar from '../Dashboard/NavBar'; // Adjust path
 
 const Leaderboard = () => {
   const [leaderboardData, setLeaderboardData] = useState([]);
