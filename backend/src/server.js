@@ -1,6 +1,5 @@
 import { server } from "./app.js";
 import connectDB from "./config/database.js";
-import "./workers/submissionWorker.js";
 
 const PORT = process.env.PORT || 5000;
 

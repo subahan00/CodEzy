@@ -7,6 +7,8 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "start:pm2": "pm2 start ecosystem.config.cjs",
+    "stop:pm2": "pm2 stop ecosystem.config.cjs",
     "dev": "nodemon --ignore temp_submissions/ src/server.js",
     "seed": "node src/seeds/index.js"
   },
@@ -15,6 +17,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@bull-board/api": "^7.0.0",
+    "@bull-board/express": "^7.0.0",
     "@google/genai": "^1.32.0",
     "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^3.0.3",
@@ -26,6 +30,7 @@
     "ioredis": "^5.9.0",
     "mongoose": "^9.0.0",
     "openai": "^6.10.0",
+    "pm2": "^6.0.14",
     "recharts": "^3.8.1",
     "socket.io": "^4.8.3"
   },

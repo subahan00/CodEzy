@@ -12,6 +12,7 @@ import userRoutes from "./routes/UserRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 import { setupSocketHandlers } from "./sockets/socketManager.js";
 import adminRoutes from "./routes/admin.routes.js";
+import { serverAdapter } from "./config/bullBoard.js";
 dotenv.config();
 
 const app = express();
@@ -37,6 +38,9 @@ app.use("/api/submissions", submissionRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/admin", adminRoutes);
+
+// ✅ Bull Board UI
+app.use('/admin/queues', serverAdapter.getRouter());
 app.get("/", (req, res) => {
   res.send("Backend API is Running 🚀");
 });

@@ -2,12 +2,19 @@
 import Content from '../../models/Content.model.js';    
 import mongoose from 'mongoose';
 import Submission from '../../models/submission.model.js';
-import { addSubmissionToQueue, submissionQueue } from '../../queues/submissionQueue.js'; // Ensure submissionQueue is imported
+import { addSubmissionToQueue, submissionQueue, runQueue } from '../../queues/submissionQueue.js'; // Ensure submissionQueue is imported
 import TestCase from '../../models/testCase.model.js';
 import { QueueEvents } from 'bullmq'; // 👈 IMPORT THIS
 
 // 1. Create QueueEvents listener (connects to Redis)
 const queueEvents = new QueueEvents('submission-queue', {
+  connection: {
+    host: '127.0.0.1', 
+    port: 6379
+  }
+});
+
+const runQueueEvents = new QueueEvents('run-queue', {
   connection: {
     host: '127.0.0.1', 
     port: 6379
@@ -135,14 +142,20 @@ export const runCode = async (req, res) => {
       return res.status(400).json({ message: 'No test cases found for this problem' });
     }
 
-    const job = await submissionQueue.add('run', {
+    const job = await runQueue.add('run', {
       language,
       code,
       testCases, // ✅ Full array
       isDryRun: true
+    }, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 2000
+      }
     });
 
-    const result = await job.waitUntilFinished(queueEvents, 30000); // Increased timeout for multiple tests
+    const result = await job.waitUntilFinished(runQueueEvents, 30000); // Increased timeout for multiple tests
 
     // ✅ Fix #3: Return with explicit passedTests/totalTests keys
     // so DuelRoom.jsx can read them clearly

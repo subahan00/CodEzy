@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+import mongoose from 'mongoose';
+import connectDB from '../config/database.js';
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { runJavaScriptJudge } from '../services/compiler/judgeRunner.js';
@@ -9,14 +14,18 @@ import Content from '../models/Content.model.js';
 import { updateSkillMastery } from '../services/recommendation/recommendation.service.js';
 import { classifyFailureReason } from '../services/ai/LLMserviceGROQ.js';
 
-const connection = new IORedis({
-  host: '127.0.0.1',
-  port: 6379,
-  maxRetriesPerRequest: null
-});
+const startWorker = async () => {
+  try {
+    await connectDB(); // ✅ WAIT for DB before starting worker
+    
+    const connection = new IORedis({
+      host: '127.0.0.1',
+      port: 6379,
+      maxRetriesPerRequest: null
+    });
 
-// 1. Define the Worker
-const worker = new Worker('submission-queue', async (job) => {
+    // 1. Define the Worker
+    const worker = new Worker('submission-queue', async (job) => {
 
   const label = job.data.isDryRun ? 'Dry Run' : `Submission ${job.data.submissionId}`;
   console.log(`Job ${job.id}: Processing ${label}...`);
@@ -81,16 +90,28 @@ const worker = new Worker('submission-queue', async (job) => {
 
 }, {
   connection,
-  concurrency: 1 // 🔥 CRITICAL: Only run 1 docker container at a time
+  concurrency: 2, // 🔥 CRITICAL: Run up to 2 dockers at a time
+  limiter: {
+    max: 50,
+    duration: 1000
+  }
 });
 
-// 2. Event Listeners
-worker.on('completed', (job, returnvalue) => {
-  console.log(`Job ${job.id}: Completed! Result:`, returnvalue?.status || "Unknown");
-});
+    // 2. Event Listeners
+    worker.on('completed', (job, returnvalue) => {
+      console.log(`Job ${job.id}: Completed! Result:`, returnvalue?.status || "Unknown");
+    });
 
-worker.on('failed', (job, err) => {
-  console.error(`Job ${job.id}: Failed with error ${err.message}`);
-});
+    worker.on('failed', (job, err) => {
+      console.error(`Job ${job.id}: Failed with error ${err.message}`);
+    });
 
-export default worker;
+    console.log('✅ Submission Worker started successfully');
+
+  } catch (err) {
+    console.error('❌ Worker failed to start:', err.message);
+    process.exit(1);
+  }
+};
+
+startWorker();
