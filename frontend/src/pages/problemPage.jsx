@@ -55,7 +55,7 @@ const ProblemPage = () => {
     try {
       const token = localStorage.getItem('token');
       // Call the backend AI evaluation route
-      const res = await axios.post('http://localhost:9999/api/ai/evaluate', {
+      const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/ai/evaluate`, {
         code: code,
         language: language,
         problemId: problem._id

@@ -15,7 +15,7 @@ const ManageUsers = () => {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:9999/api/admin/users', {
+      const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUsers(res.data.data);
@@ -34,7 +34,7 @@ const ManageUsers = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:9999/api/admin/users/${userId}`, updateData, {
+      await axios.put(`${import.meta.env.VITE_BACKEND_URL}/api/admin/users/${userId}`, updateData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

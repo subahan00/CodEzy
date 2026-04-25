@@ -1,7 +1,7 @@
 
 //LoginService.js
 import axios from 'axios'
-const url= "http://localhost:9999/api"
+const url=`${import.meta.env.VITE_BACKEND_URL}/api`
 
 const LoginService =
 {  

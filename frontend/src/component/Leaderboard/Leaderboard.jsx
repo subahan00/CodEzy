@@ -16,7 +16,7 @@ const Leaderboard = () => {
       try {
         const token = localStorage.getItem("token");
         // Replace with your actual backend URL
-        const res = await axios.get(`http://localhost:9999/api/leaderboard?category=${category}`, {
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/leaderboard?category=${category}`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         setLeaderboardData(res.data.data);

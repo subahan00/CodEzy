@@ -42,7 +42,7 @@ function AiMentor({
         content: m.text
       }));
 
-      const res = await axios.post("http://localhost:9999/api/ai/ask", {
+      const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/ai/ask`, {
         prompt: finalPrompt,
         code: currentCode,
         problemStatement: problemStatement,

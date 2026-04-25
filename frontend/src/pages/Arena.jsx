@@ -8,7 +8,7 @@ import { FiCrosshair, FiLoader, FiEye } from 'react-icons/fi';
 let socket = null;
 const getSocket = () => {
   if (!socket) {
-    socket = io('http://localhost:9999', {
+    socket = io(import.meta.env.VITE_BACKEND_URL, {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,

@@ -7,7 +7,7 @@ import { FiEye, FiLoader, FiClock } from 'react-icons/fi';
 let socket = null;
 const getSocket = () => {
   if (!socket) {
-    socket = io('http://localhost:9999', { reconnection: true });
+    socket = io(import.meta.env.VITE_BACKEND_URL, { reconnection: true });
   }
   return socket;
 };

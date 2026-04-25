@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:9999/api/users';
+const BASE_URL = `${import.meta.env.VITE_BACKEND_URL}/api/users`;
 
 export const profileService = {
 

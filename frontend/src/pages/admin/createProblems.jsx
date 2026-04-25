@@ -87,7 +87,7 @@ const AddProblem = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post('http://localhost:9999/api/ai/generate-tests', {
+            const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/ai/generate-tests`, {
                 title: form.title,
                 description: form.description
             }, {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-const BASE_URL = 'http://localhost:9999/api/submissions';
+const BASE_URL = `${import.meta.env.VITE_BACKEND_URL}/api/submissions`;
 const submissionService = {
   createSubmission: async (contentId, language, sourceCode) => {
     try {

@@ -13,7 +13,7 @@ const formatTime = (ms) => {
 
 let _socket = null;
 const getSocket = () => {
-  if (!_socket) _socket = io('http://localhost:9999', { reconnection: true, reconnectionDelay: 1000 });
+  if (!_socket) _socket = io(import.meta.env.VITE_BACKEND_URL, { reconnection: true, reconnectionDelay: 1000 });
   return _socket;
 };
 

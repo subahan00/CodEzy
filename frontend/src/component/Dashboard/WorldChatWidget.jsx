@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { FiSend, FiGlobe, FiHash } from 'react-icons/fi';
 
-const socket = io.connect("http://localhost:9999");
+const socket = io.connect(import.meta.env.VITE_BACKEND_URL);
 
 const WorldChatWidget = () => {
   const [currentMessage, setCurrentMessage] = useState("");

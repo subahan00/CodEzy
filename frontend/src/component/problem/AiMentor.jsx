@@ -126,7 +126,7 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:9999/api/ai/ask', {
+      const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/ai/ask`, {
         prompt: `${userText} ${buildContext()}`,
         code: currentCode,
         history,

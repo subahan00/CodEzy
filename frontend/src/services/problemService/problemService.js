@@ -1,5 +1,5 @@
 import axios from 'axios';
-const BASE_URL = 'http://localhost:9999/api/problems';
+const BASE_URL = `${import.meta.env.VITE_BACKEND_URL}/api/problems`;
 const problemService = {
     getProblemBySlug: async (slug) => {
         try {
