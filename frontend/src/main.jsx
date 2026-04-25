@@ -5,7 +5,7 @@ import App from './App.jsx';
 import './index.css';
 import React from 'react';
 
-import { AuthProvider } from './context/authContext.jsx';
+import { AuthProvider } from './context/AuthContext.jsx';
 
 console.log('Runtime React version:', React?.version);
 
