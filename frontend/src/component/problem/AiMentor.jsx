@@ -259,7 +259,7 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
           return (
             <button
               key={id}
-              onClick={() => send(p, id)}  {/* id IS the backend mode */}
+              onClick={() => send(p, id)}
               disabled={disabled}
               className="flex items-center gap-2 px-3 py-2 rounded transition-all text-left"
               style={{
