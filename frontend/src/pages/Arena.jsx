@@ -9,6 +9,9 @@ let socket = null;
 const getSocket = () => {
   if (!socket) {
     socket = io(import.meta.env.VITE_BACKEND_URL, {
+      extraHeaders: {
+        "ngrok-skip-browser-warning": "true"
+      },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,

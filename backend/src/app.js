@@ -16,23 +16,29 @@ import { serverAdapter } from "./config/bullBoard.js";
 dotenv.config();
 
 const app = express();
-app.use(cors(
-  
-));
-app.use(express.json());
-
-// ✅ Create HTTP server
-const server = http.createServer(app);
 const allowedOrigins = [
   "http://localhost:5173",
   "https://codezy-frontend.netlify.app"
 ];
+
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+  credentials: true
+}));
+app.use(express.json());
+
+// ✅ Create HTTP server
+const server = http.createServer(app);
+
 // ✅ Attach Socket.IO
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-
     methods: ["GET", "POST"],
+    allowedHeaders: ["ngrok-skip-browser-warning"],
+    credentials: true
   },
 });
 
