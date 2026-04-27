@@ -1,0 +1,6 @@
+{
+  "ignore": [
+    "temp_submissions/*",
+    "node_modules/*"
+  ]
+}

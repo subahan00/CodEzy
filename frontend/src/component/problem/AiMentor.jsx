@@ -18,11 +18,12 @@ const PERSONAS = [
 ];
 
 // ── Quick actions ─────────────────────────────────────────────────────────
+// Each action maps to a backend mentor mode and always uses /ai/mentor
 const ACTIONS = [
-  { id: 'evaluate',   Icon: FiCode,        label: 'Review code',     color: '#93c5fd', prompt: "Review my code, evaluate the approach, and roast me mildly if it's bad. Don't give the full solution." },
-  { id: 'debug',      Icon: FiAlertCircle, label: 'Debug errors',    color: '#fca5a5', prompt: "Analyze my execution results and explain exactly why the code is failing.", needsResult: true },
-  { id: 'hint',       Icon: FiHelpCircle,  label: 'Give a hint',     color: '#fcd34d', prompt: "Give me one small, cryptic hint for the next step. DO NOT give the solution away." },
-  { id: 'complexity', Icon: FiTrendingUp,  label: 'Complexity',      color: '#6ee7b7', prompt: "Calculate the exact Big-O Time and Space complexity of my current code and explain each part." },
+  { id: 'pre_eval',         Icon: FiCode,        label: 'Review code',  color: '#93c5fd', prompt: "Review my code and evaluate my approach." },
+  { id: 'error_explanation',Icon: FiAlertCircle, label: 'Debug errors', color: '#fca5a5', prompt: "Explain exactly why my code is failing.", needsResult: true },
+  { id: 'hint',             Icon: FiHelpCircle,  label: 'Give a hint',  color: '#fcd34d', prompt: "Give me one small hint for the next step." },
+  { id: 'complexity',       Icon: FiTrendingUp,  label: 'Complexity',   color: '#6ee7b7', prompt: "Analyze the Big-O Time and Space complexity of my code." },
 ];
 
 // ── Message bubble ────────────────────────────────────────────────────────
@@ -102,44 +103,82 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat, loading]);
 
-  const buildContext = useCallback(() => {
-    let ctx = `\n\n--- SYSTEM CONTEXT ---\nProblem: ${problem?.title}\nLanguage: ${language}\nCode:\n${currentCode || 'No code yet.'}`;
-    if (executionResult) {
-      ctx += `\nLast run status: ${executionResult.status}`;
-      if (executionResult.error)          ctx += `\nError: ${executionResult.error}`;
-      if (executionResult.expectedOutput) ctx += `\nExpected: ${executionResult.expectedOutput}\nActual: ${executionResult.output}`;
-    }
-    return ctx;
-  }, [problem, language, currentCode, executionResult]);
-
-  const send = useCallback(async (userText) => {
-    if (!userText.trim() || loading) return;
-
-    const history = chat.slice(1).map(m => ({
+  // Build clean history — strips any legacy SYSTEM CONTEXT suffixes
+  const buildHistory = useCallback(() =>
+    chat.slice(1).map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
-      content: m.text,
-    }));
+      content: m.text.split('--- SYSTEM CONTEXT ---')[0].trim(),
+    }))
+  , [chat]);
 
+  // ── GENERAL CHAT  →  POST /ai/chat  (no code context at all) ────────────
+  const sendGeneralChat = useCallback(async (userText) => {
     setChat(prev => [...prev, { role: 'user', text: userText }]);
     setPrompt('');
     setLoading(true);
-
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/ai/ask`, {
-        prompt: `${userText} ${buildContext()}`,
-        code: currentCode,
-        history,
-        persona,
-      }, { headers: { Authorization: `Bearer ${token}` } });
-
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/ai/chat`,
+        { prompt: userText, history: buildHistory(), persona },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setChat(prev => [...prev, { role: 'ai', text: res.data.answer }]);
     } catch {
       setChat(prev => [...prev, { role: 'ai', text: 'Connection lost. Please try again.' }]);
     } finally {
       setLoading(false);
     }
-  }, [chat, loading, buildContext, currentCode, persona]);
+  }, [buildHistory, persona]);
+
+  // ── MENTOR ACTION  →  POST /ai/mentor  (full context, problem-aware) ────
+  const sendMentorAction = useCallback(async (userText, mode) => {
+    setChat(prev => [...prev, { role: 'user', text: userText }]);
+    setPrompt('');
+    setLoading(true);
+
+    // Build error output string for debug mode
+    let errorOutput = null;
+    if (executionResult) {
+      const parts = [`Status: ${executionResult.status}`];
+      if (executionResult.error)          parts.push(`Error: ${executionResult.error}`);
+      if (executionResult.expectedOutput) parts.push(`Expected: ${executionResult.expectedOutput}`, `Actual: ${executionResult.output}`);
+      errorOutput = parts.join('\n');
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/ai/mentor`,
+        {
+          prompt: userText,
+          history: buildHistory(),
+          persona,
+          mode,
+          code: currentCode,
+          problemId: problem?._id,
+          errorOutput,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setChat(prev => [...prev, { role: 'ai', text: res.data.answer }]);
+    } catch {
+      setChat(prev => [...prev, { role: 'ai', text: 'Connection lost. Please try again.' }]);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildHistory, persona, currentCode, problem, executionResult]);
+
+  // ── Router: decide which endpoint to call ────────────────────────────────
+  // Action buttons always go to mentor. Free-text input goes to general chat.
+  const send = useCallback(async (userText, mentorMode = null) => {
+    if (!userText.trim() || loading) return;
+    if (mentorMode) {
+      await sendMentorAction(userText, mentorMode);
+    } else {
+      await sendGeneralChat(userText);
+    }
+  }, [loading, sendGeneralChat, sendMentorAction]);
 
   return (
     <div
@@ -220,7 +259,7 @@ const AiMentorTab = ({ currentCode, language, problem, executionResult }) => {
           return (
             <button
               key={id}
-              onClick={() => send(p)}
+              onClick={() => send(p, id)}  {/* id IS the backend mode */}
               disabled={disabled}
               className="flex items-center gap-2 px-3 py-2 rounded transition-all text-left"
               style={{

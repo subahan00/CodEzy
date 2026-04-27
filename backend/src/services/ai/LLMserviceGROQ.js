@@ -5,15 +5,37 @@ dotenv.config();
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ── FOR MODULES 2-6 (Conversational Mentor) ──
-export async function generateContent(messages) {
+//
+// Temperature guide:
+//   normal_chat / concept → 0.7  (warm, natural, conversational)
+//   hint                  → 0.5  (balanced — still creative but focused)
+//   error_explanation /
+//   pre_eval / edge_case /
+//   complexity            → 0.2  (precise, analytical, deterministic)
+//
+const MODE_TEMPERATURE = {
+  general_chat:      0.8,   // Warm, natural, human-like conversation
+  normal_chat:       0.7,
+  concept:           0.7,
+  hint:              0.5,
+  error_explanation: 0.2,
+  pre_eval:          0.2,
+  edge_case:         0.2,
+  complexity:        0.2,
+};
+
+export async function generateContent(messages, mode = 'normal_chat') {
   if (!messages || !Array.isArray(messages)) {
     throw new Error("Messages must be an array");
   }
 
+  const temperature = MODE_TEMPERATURE[mode] ?? 0.5;
+
   const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",  
-    messages: messages, 
-    temperature: 0.3, // Slightly creative for persona
+    model: "llama-3.3-70b-versatile",
+    messages: messages,
+    temperature,
+    max_tokens: 1024,
   });
 
   return response.choices?.[0]?.message?.content ?? "";

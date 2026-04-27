@@ -9,7 +9,7 @@
     "start": "node src/server.js",
     "start:pm2": "pm2 start ecosystem.config.cjs",
     "stop:pm2": "pm2 stop ecosystem.config.cjs",
-    "dev": "nodemon --ignore temp_submissions/ src/server.js",
+    "dev": "nodemon src/server.js",
     "dev:all": "concurrently \"npm run dev\" \"nodemon src/workers/runWorker.js\" \"nodemon src/workers/submissionWorker.js\" \"nodemon src/workers/aiWorker.js\"",
     "seed": "node src/seeds/index.js"
   },

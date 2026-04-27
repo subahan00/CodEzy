@@ -388,7 +388,6 @@ public class Main {
         Files.write(Paths.get("/workspace/results.json"), json.getBytes());
     }
 }
-}
 `
 
 ,
